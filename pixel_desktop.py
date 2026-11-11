@@ -1,17 +1,26 @@
 #!/usr/bin/env python3
 """
-Google Pixel Desktop UI / Material Design 3 (MD3) for Linux Mint Cinnamon.
+Material You (MD3) Pastel Desktop Environment for Linux Mint (Cinnamon).
 Designed for ThinkPad X1 Carbon Gen 6.
-- 0.0% CPU when idle (Event-driven DBus & minute-boundary timers)
-- Clean, modular, hyper-efficient GTK3 & Cairo native renderer
-- Authentic Google Pixel 'At a Glance', MD3 Clock, Google Search Pill, and Media Widget
+- Recreates the exact pastel aesthetic from the reference setup:
+  * Pebble Hour (pink) + Card Minute (cyan)
+  * Asymmetric Weather pebble + Scalloped Flower Battery rosette
+  * Music Player card + Avatar Calendar card
+  * Corner action buttons (Power + Chat)
+  * Date card + 4 Quick Launcher pastel pills
+  * Control Center card with volume slider & quick toggles
+  * Floating peach pill dock with interactive search
+- 0.0% CPU when idle (Event-driven DBus & minute boundary timers)
+- Click-through on transparent areas via input_shape_combine_region
 """
 
 import os
 import sys
+import math
 import time
 import json
 import signal
+import calendar
 import datetime
 import urllib.request
 import subprocess
@@ -27,42 +36,54 @@ gi.require_version('PangoCairo', '1.0')
 from gi.repository import Gtk, Gdk, GLib, Gio, Rsvg, Pango, PangoCairo
 import cairo
 
-# Asset paths
-ASSETS_DIR = "/home/teddy/Applications/pixel-desktop/assets"
-WEATHER_CACHE_PATH = os.path.expanduser("~/.cache/weather-cache.json")
-WEATHER_CONFIG_PATH = os.path.expanduser("~/.config/weather-config.json")
-
 # Screen Dimensions
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 
-# UI Dimensions & Layout Coordinates
-AT_A_GLANCE_X = 80
-AT_A_GLANCE_Y = 65
-AT_A_GLANCE_W = 420
-AT_A_GLANCE_H = 100
+# UI Coordinates & Layout (Matches Reference Screenshot)
+CLOCK_X = 65
+CLOCK_Y = 50
 
-CLOCK_W = 380
-CLOCK_H = 120
-CLOCK_X = int((SCREEN_WIDTH - CLOCK_W) / 2)
-CLOCK_Y = 160
+WEATHER_BAT_X = 65
+WEATHER_BAT_Y = 165
 
-SEARCH_W = 580
-SEARCH_H = 54
-SEARCH_X = int((SCREEN_WIDTH - SEARCH_W) / 2)
-SEARCH_Y = CLOCK_Y + CLOCK_H + 28
+MUSIC_X = 65
+MUSIC_Y = 560
+MUSIC_W = 310
+MUSIC_H = 86
 
-MEDIA_W = 480
-MEDIA_H = 72
-MEDIA_X = int((SCREEN_WIDTH - MEDIA_W) / 2)
-MEDIA_Y = SEARCH_Y + SEARCH_H + 25
+CALENDAR_X = 65
+CALENDAR_Y = 665
+CALENDAR_W = 330
+CALENDAR_H = 205
 
-class PixelDesktopWindow(Gtk.Window):
+CORNER_BTN_X = 65
+CORNER_BTN_Y = 888
+
+DATE_NOTES_X = 1525
+DATE_NOTES_Y = 50
+DATE_NOTES_W = 330
+DATE_NOTES_H = 160
+
+PILLS_X = 1525
+PILLS_Y = 225
+
+CONTROL_X = 1525
+CONTROL_Y = 390
+CONTROL_W = 330
+CONTROL_H = 370
+
+DOCK_W = 740
+DOCK_H = 60
+DOCK_X = int((SCREEN_WIDTH - DOCK_W) / 2)
+DOCK_Y = 995
+
+
+class MaterialYouDesktop(Gtk.Window):
     def __init__(self):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
 
-        # Basic Window Configuration
-        self.set_title("PixelDesktop")
+        self.set_title("MaterialYouDesktop")
         self.set_decorated(False)
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
@@ -71,7 +92,6 @@ class PixelDesktopWindow(Gtk.Window):
         self.set_type_hint(Gdk.WindowTypeHint.DOCK)
         self.set_app_paintable(True)
 
-        # Transparent RGBA Visual
         screen = self.get_screen()
         visual = screen.get_rgba_visual()
         if visual:
@@ -82,71 +102,60 @@ class PixelDesktopWindow(Gtk.Window):
         self.move(0, 0)
 
         # State Variables
-        self.current_time_str = datetime.datetime.now().strftime("%H:%M")
-        self.current_date_str = datetime.datetime.now().strftime("%A, %b %-d")
-        self.battery_pct = 100
-        self.battery_state = 5  # UPower full/charging/discharging
+        now = datetime.datetime.now()
+        self.hour_str = now.strftime("%H")
+        self.min_str = now.strftime("%M")
+        self.month_str = now.strftime("%b").upper()
+        self.day_str = str(now.day)
+        self.weekday_str = now.strftime("%A, %-d %b")
+
+        self.battery_pct = 79
+        self.battery_state = 5  # 1=charging, 2=discharging, 4=full
         self.cpu_temp = 50
-        self.fan_rpm = 0
+        self.volume_level = 50  # 0..100
 
         # Weather Data
-        self.weather_info = {
-            "city": "Malang",
-            "temp": 25,
-            "code": 3,
-            "condition": "Partly Cloudy"
-        }
-        self.load_weather_cache()
+        self.weather_temp = 25
+        self.weather_cond = "Partly Cloudy"
 
-        # MPRIS Media Data
+        # MPRIS State
         self.media_playing = False
-        self.media_title = ""
-        self.media_artist = ""
-        self.media_player_name = ""
+        self.media_title = "Starlight Serenade"
+        self.media_artist = "Cosmic Whispers"
+        self.media_player_bus = ""
 
         # Search Bar State
         self.search_active = False
-
-        # Load SVG Icons
-        self.icon_g = self.load_svg("google-g.svg")
-        self.icon_mic = self.load_svg("google-mic.svg")
-        self.icon_lens = self.load_svg("google-lens.svg")
 
         # Container for interactive widgets
         self.fixed = Gtk.Fixed()
         self.add(self.fixed)
 
-        # Search Entry Widget (initially hidden/unmapped inside the pill)
+        # Search Entry Widget
         self.search_entry = Gtk.Entry()
-        self.search_entry.set_size_request(SEARCH_W - 130, SEARCH_H - 14)
+        self.search_entry.set_size_request(160, 36)
         self.search_entry.set_has_frame(False)
-        self.search_entry.set_placeholder_text("Search Google or type a command...")
+        self.search_entry.set_placeholder_text("Search Google...")
         self.search_entry.connect("activate", self.on_search_submit)
         self.search_entry.connect("key-press-event", self.on_search_key)
         self.search_entry.connect("focus-out-event", self.on_search_focus_out)
 
-        # Custom CSS styling for the entry
         css_provider = Gtk.CssProvider()
         css_provider.load_from_data(b"""
             entry {
                 background: transparent;
-                color: #ffffff;
+                color: #1e293b;
                 font-family: 'Google Sans', sans-serif;
-                font-size: 15px;
-                caret-color: #a8c7fa;
+                font-size: 13px;
+                caret-color: #0284c7;
                 border: none;
-                padding-left: 8px;
-            }
-            entry selection {
-                background-color: #a8c7fa;
-                color: #041e49;
+                padding-left: 4px;
             }
         """)
         self.search_entry.get_style_context().add_provider(
             css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
-
-        self.fixed.put(self.search_entry, SEARCH_X + 56, SEARCH_Y + 7)
+        self.fixed.put(self.search_entry, DOCK_X + 90, DOCK_Y + 12)
 
         # Events
         self.add_events(
@@ -157,52 +166,49 @@ class PixelDesktopWindow(Gtk.Window):
         self.connect("button-press-event", self.on_button_press)
         self.connect("realize", self.on_realize)
 
-        # Setup Event Watchdogs
+        # Setup Watchdogs & DBus
         self.init_dbus_watchers()
-        self.update_hardware_stats()
+        self.read_initial_volume()
         self.schedule_next_minute_tick()
-
-        # Weather background refresh thread
         self.fetch_weather_async()
-        GLib.timeout_add_seconds(900, self.fetch_weather_async)  # Every 15 min
-
-    def load_svg(self, filename):
-        path = os.path.join(ASSETS_DIR, filename)
-        if os.path.exists(path):
-            try:
-                return Rsvg.Handle.new_from_file(path)
-            except Exception as e:
-                print(f"[PixelDesktop] Error loading SVG {filename}: {e}")
-        return None
+        GLib.timeout_add_seconds(900, self.fetch_weather_async)
 
     def on_realize(self, widget):
         self.update_input_regions()
 
     def update_input_regions(self):
-        """Configure X11 input regions so empty desktop is 100% click-through."""
+        """Define exact clickable regions so empty desktop is 100% click-through."""
         window = self.get_window()
         if not window:
             return
 
         region = cairo.Region()
-        # 1. At a Glance rectangle
-        region.union(cairo.RectangleInt(AT_A_GLANCE_X, AT_A_GLANCE_Y, AT_A_GLANCE_W, AT_A_GLANCE_H))
-        # 2. Clock rectangle
-        region.union(cairo.RectangleInt(CLOCK_X, CLOCK_Y, CLOCK_W, CLOCK_H))
-        # 3. Search Bar rectangle
-        region.union(cairo.RectangleInt(SEARCH_X, SEARCH_Y, SEARCH_W, SEARCH_H))
-        # 4. Media Player rectangle (if playing)
-        if self.media_playing:
-            region.union(cairo.RectangleInt(MEDIA_X, MEDIA_Y, MEDIA_W, MEDIA_H))
+        # 1. Clock cards
+        region.union(cairo.RectangleInt(CLOCK_X, CLOCK_Y, 260, 105))
+        # 2. Weather & Battery
+        region.union(cairo.RectangleInt(WEATHER_BAT_X, WEATHER_BAT_Y, 260, 95))
+        # 3. Music Player
+        region.union(cairo.RectangleInt(MUSIC_X, MUSIC_Y, MUSIC_W, MUSIC_H))
+        # 4. Calendar Card
+        region.union(cairo.RectangleInt(CALENDAR_X, CALENDAR_Y, CALENDAR_W, CALENDAR_H))
+        # 5. Corner Action Buttons
+        region.union(cairo.RectangleInt(CORNER_BTN_X, CORNER_BTN_Y, 115, 52))
+        # 6. Date & Notes Card
+        region.union(cairo.RectangleInt(DATE_NOTES_X, DATE_NOTES_Y, DATE_NOTES_W, DATE_NOTES_H))
+        # 7. 4 Quick Launcher Pills
+        region.union(cairo.RectangleInt(PILLS_X, PILLS_Y, DATE_NOTES_W, 110))
+        # 8. Control Center Card
+        region.union(cairo.RectangleInt(CONTROL_X, CONTROL_Y, CONTROL_W, CONTROL_H))
+        # 9. Bottom Floating Dock
+        region.union(cairo.RectangleInt(DOCK_X, DOCK_Y, DOCK_W, DOCK_H))
 
         window.input_shape_combine_region(region, 0, 0)
 
     # -------------------------------------------------------------
-    # DBus Watchers (Pure Event-Driven, 0% CPU Idle)
+    # DBus Watchers (Event-Driven)
     # -------------------------------------------------------------
     def init_dbus_watchers(self):
         try:
-            # UPower Device Watcher
             sys_bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
             sys_bus.signal_subscribe(
                 "org.freedesktop.UPower",
@@ -214,7 +220,6 @@ class PixelDesktopWindow(Gtk.Window):
                 self.on_upower_changed,
                 None
             )
-            # Read initial battery state
             upower = Gio.DBusProxy.new_sync(
                 sys_bus, Gio.DBusProxyFlags.NONE, None,
                 "org.freedesktop.UPower",
@@ -229,10 +234,9 @@ class PixelDesktopWindow(Gtk.Window):
             if state:
                 self.battery_state = state.unpack()
         except Exception as e:
-            print(f"[PixelDesktop] UPower watcher error: {e}")
+            print(f"[MaterialYou] UPower error: {e}")
 
         try:
-            # MPRIS Media Watcher
             sess_bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
             sess_bus.signal_subscribe(
                 None,
@@ -241,7 +245,7 @@ class PixelDesktopWindow(Gtk.Window):
                 "/org/mpris/MediaPlayer2",
                 None,
                 Gio.DBusSignalFlags.NONE,
-                self.on_mpris_properties_changed,
+                self.on_mpris_changed,
                 None
             )
             sess_bus.signal_subscribe(
@@ -251,12 +255,12 @@ class PixelDesktopWindow(Gtk.Window):
                 "/org/freedesktop/DBus",
                 None,
                 Gio.DBusSignalFlags.NONE,
-                self.on_mpris_name_owner_changed,
+                self.on_mpris_changed,
                 None
             )
             self.refresh_mpris_state()
         except Exception as e:
-            print(f"[PixelDesktop] MPRIS watcher error: {e}")
+            print(f"[MaterialYou] MPRIS error: {e}")
 
     def on_upower_changed(self, connection, sender, path, iface, signal, params, user_data):
         try:
@@ -265,17 +269,12 @@ class PixelDesktopWindow(Gtk.Window):
                 self.battery_pct = round(props["Percentage"])
             if "State" in props:
                 self.battery_state = props["State"]
-            self.queue_draw_area(AT_A_GLANCE_X, AT_A_GLANCE_Y, AT_A_GLANCE_W, AT_A_GLANCE_H)
+            self.queue_draw_area(WEATHER_BAT_X, WEATHER_BAT_Y, 260, 95)
         except Exception:
             pass
 
-    def on_mpris_properties_changed(self, conn, sender, path, iface, signal, params, user_data):
+    def on_mpris_changed(self, *args):
         GLib.idle_add(self.refresh_mpris_state)
-
-    def on_mpris_name_owner_changed(self, conn, sender, path, iface, signal, params, user_data):
-        name = params.unpack()[0]
-        if name.startswith("org.mpris.MediaPlayer2"):
-            GLib.idle_add(self.refresh_mpris_state)
 
     def refresh_mpris_state(self):
         try:
@@ -312,107 +311,59 @@ class PixelDesktopWindow(Gtk.Window):
                     self.media_playing = True
                     self.media_title = str(title) if title else "Now Playing"
                     self.media_artist = str(artist) if artist else "Unknown Artist"
-                    self.media_player_name = player_bus_name
+                    self.media_player_bus = player_bus_name
                     found_active = True
                     break
 
-            if not found_active and self.media_playing:
+            if not found_active:
                 self.media_playing = False
-                self.media_title = ""
-                self.media_artist = ""
-                self.media_player_name = ""
+                if not self.media_title or self.media_title == "Now Playing":
+                    self.media_title = "Starlight Serenade"
+                    self.media_artist = "Cosmic Whispers"
 
-            self.update_input_regions()
-            self.queue_draw_area(MEDIA_X - 10, MEDIA_Y - 10, MEDIA_W + 20, MEDIA_H + 20)
+            self.queue_draw_area(MUSIC_X - 5, MUSIC_Y - 5, MUSIC_W + 10, MUSIC_H + 10)
         except Exception:
             pass
 
+    def read_initial_volume(self):
+        try:
+            out = subprocess.check_output(["pactl", "get-sink-volume", "@DEFAULT_SINK@"], text=True)
+            for part in out.split("/"):
+                part = part.strip()
+                if part.endswith("%"):
+                    self.volume_level = int(part[:-1])
+                    break
+        except Exception:
+            self.volume_level = 50
+
     # -------------------------------------------------------------
-    # Hardware & Timer Watchdogs (Minute Boundaries)
+    # Minute Boundary Scheduler
     # -------------------------------------------------------------
     def schedule_next_minute_tick(self):
         now = datetime.datetime.now()
-        seconds_to_next_minute = 60 - now.second
-        if seconds_to_next_minute <= 0:
-            seconds_to_next_minute = 60
-        GLib.timeout_add_seconds(seconds_to_next_minute, self.on_minute_tick)
+        secs = 60 - now.second
+        if secs <= 0:
+            secs = 60
+        GLib.timeout_add_seconds(secs, self.on_minute_tick)
 
     def on_minute_tick(self):
         now = datetime.datetime.now()
-        self.current_time_str = now.strftime("%H:%M")
-        self.current_date_str = now.strftime("%A, %b %-d")
-        self.update_hardware_stats()
+        self.hour_str = now.strftime("%H")
+        self.min_str = now.strftime("%M")
+        self.month_str = now.strftime("%b").upper()
+        self.day_str = str(now.day)
+        self.weekday_str = now.strftime("%A, %-d %b")
 
-        # Redraw Clock and At a Glance
-        self.queue_draw_area(CLOCK_X - 10, CLOCK_Y - 10, CLOCK_W + 20, CLOCK_H + 20)
-        self.queue_draw_area(AT_A_GLANCE_X, AT_A_GLANCE_Y, AT_A_GLANCE_W, AT_A_GLANCE_H)
-
-        # Schedule next tick at next minute boundary
-        self.schedule_next_minute_tick()
-        return False
-
-    def update_hardware_stats(self):
-        # Read temperature
+        # Read thermal status
         try:
             with open("/proc/acpi/ibm/thermal", "r") as f:
-                line = f.readline()
-                temps = line.split()[1:]
-                self.cpu_temp = int(temps[0])
+                self.cpu_temp = int(f.readline().split()[1])
         except Exception:
             self.cpu_temp = 50
 
-        # Read fan speed
-        try:
-            with open("/proc/acpi/ibm/fan", "r") as f:
-                for line in f:
-                    if line.startswith("speed:"):
-                        self.fan_rpm = int(line.split()[1])
-                        break
-        except Exception:
-            self.fan_rpm = 0
-
-    # -------------------------------------------------------------
-    # Weather Functions (Cached + Async)
-    # -------------------------------------------------------------
-    def load_weather_cache(self):
-        if os.path.exists(WEATHER_CACHE_PATH):
-            try:
-                with open(WEATHER_CACHE_PATH, "r") as f:
-                    data = json.load(f)
-                    w = data.get("last_weather", {})
-                    if w:
-                        self.weather_info = {
-                            "city": w.get("city", "Malang"),
-                            "temp": w.get("temp", 25),
-                            "code": w.get("code", 3),
-                            "condition": self.code_to_condition(w.get("code", 3))
-                        }
-            except Exception:
-                pass
-
-    def code_to_condition(self, code):
-        mapping = {
-            0: "Clear Sky",
-            1: "Mainly Clear",
-            2: "Partly Cloudy",
-            3: "Overcast",
-            45: "Foggy",
-            48: "Depositing Rime Fog",
-            51: "Light Drizzle",
-            53: "Moderate Drizzle",
-            55: "Dense Drizzle",
-            61: "Slight Rain",
-            63: "Moderate Rain",
-            65: "Heavy Rain",
-            71: "Slight Snow",
-            73: "Moderate Snow",
-            75: "Heavy Snow",
-            80: "Rain Showers",
-            81: "Moderate Showers",
-            82: "Violent Showers",
-            95: "Thunderstorm"
-        }
-        return mapping.get(code, "Partly Cloudy")
+        self.queue_draw()
+        self.schedule_next_minute_tick()
+        return False
 
     def fetch_weather_async(self):
         def worker():
@@ -422,23 +373,20 @@ class PixelDesktopWindow(Gtk.Window):
                 if res.returncode == 0:
                     data = json.loads(res.stdout)
                     if "temp" in data:
-                        self.weather_info = {
-                            "city": data.get("city", "Malang"),
-                            "temp": data.get("temp", 25),
-                            "code": data.get("code", 3),
-                            "condition": self.code_to_condition(data.get("code", 3))
-                        }
-                        GLib.idle_add(self.queue_draw_area, AT_A_GLANCE_X, AT_A_GLANCE_Y, AT_A_GLANCE_W, AT_A_GLANCE_H)
-            except Exception as e:
-                print(f"[PixelDesktop] Weather fetch worker error: {e}")
+                        self.weather_temp = data.get("temp", 25)
+                        code = data.get("code", 3)
+                        mapping = {0: "Sunny", 1: "Mainly Clear", 2: "Partly Cloudy", 3: "Overcast", 61: "Rainy"}
+                        self.weather_cond = mapping.get(code, "Partly Cloudy")
+                        GLib.idle_add(self.queue_draw_area, WEATHER_BAT_X, WEATHER_BAT_Y, 260, 95)
+            except Exception:
+                pass
         threading.Thread(target=worker, daemon=True).start()
         return True
 
     # -------------------------------------------------------------
-    # Cairo Drawing Engine (Material Design 3 / Google Pixel)
+    # Cairo Drawing Engine (Pastel Material You)
     # -------------------------------------------------------------
-    def draw_rounded_pill(self, cr, x, y, w, h, radius):
-        """Draws a pill/rounded rectangle path."""
+    def draw_rounded_card(self, cr, x, y, w, h, radius):
         cr.new_sub_path()
         cr.arc(x + w - radius, y + radius, radius, -1.5707963, 0)
         cr.arc(x + w - radius, y + h - radius, radius, 0, 1.5707963)
@@ -446,256 +394,606 @@ class PixelDesktopWindow(Gtk.Window):
         cr.arc(x + radius, y + radius, radius, 3.1415926, 4.7123889)
         cr.close_path()
 
+    def draw_pebble(self, cr, x, y, w, h):
+        """Asymmetric organic pebble card."""
+        rx1, ry1 = w * 0.45, h * 0.48
+        rx2, ry2 = w * 0.52, h * 0.50
+        cx, cy = x + w / 2, y + h / 2
+        cr.new_sub_path()
+        cr.save()
+        cr.translate(cx, cy)
+        cr.scale(rx1, ry1)
+        cr.arc(0, 0, 1.0, 0, 2 * math.pi)
+        cr.restore()
+
+    def draw_scalloped_flower(self, cr, xc, yc, r0=38, A=4.5, N=12):
+        """Scalloped flower rosette badge."""
+        cr.new_sub_path()
+        steps = 96
+        for i in range(steps):
+            theta = i * 2 * math.pi / steps
+            r = r0 + A * math.cos(N * theta)
+            px = xc + r * math.cos(theta)
+            py = yc + r * math.sin(theta)
+            if i == 0:
+                cr.move_to(px, py)
+            else:
+                cr.line_to(px, py)
+        cr.close_path()
+
     def on_draw(self, widget, cr):
-        # 1. Clear with total transparency
         cr.set_operator(cairo.OPERATOR_SOURCE)
         cr.set_source_rgba(0, 0, 0, 0)
         cr.paint()
         cr.set_operator(cairo.OPERATOR_OVER)
 
-        # 2. Draw Google Pixel "At a Glance" Widget
-        self.draw_at_a_glance(cr)
+        # 1. Clock (Top Left)
+        self.draw_clock_widgets(cr)
 
-        # 3. Draw Material You Clock Pill
-        self.draw_pixel_clock(cr)
+        # 2. Weather & Battery Badges (Top Left)
+        self.draw_weather_battery(cr)
 
-        # 4. Draw Google Pixel Search Bar Pill
-        self.draw_search_bar(cr)
+        # 3. Music Player (Bottom Left)
+        self.draw_music_player(cr)
 
-        # 5. Draw Material You Media Player (if active)
-        if self.media_playing:
-            self.draw_media_player(cr)
+        # 4. Calendar & Avatar Card (Bottom Left)
+        self.draw_calendar_card(cr)
+
+        # 5. Corner Action Buttons (Bottom Left Corner)
+        self.draw_corner_buttons(cr)
+
+        # 6. Date & Notes Card (Top Right)
+        self.draw_date_notes(cr)
+
+        # 7. 4 Quick Launcher Pills (Top Right)
+        self.draw_quick_pills(cr)
+
+        # 8. Control Center Card (Bottom Right)
+        self.draw_control_center(cr)
+
+        # 9. Bottom Floating Dock
+        self.draw_bottom_dock(cr)
 
         return False
 
-    def draw_at_a_glance(self, cr):
-        """Google Pixel 'At a Glance' (Date, Weather, Battery & Thermal status)."""
-        x = AT_A_GLANCE_X
-        y = AT_A_GLANCE_Y
-
-        # Soft drop shadow for legibility over any wallpaper
-        cr.save()
-
-        # Date Line
-        layout = self.create_pango_layout(self.current_date_str)
-        desc = Pango.FontDescription("Google Sans Medium 22")
-        layout.set_font_description(desc)
-
-        # Shadow
-        cr.set_source_rgba(0, 0, 0, 0.45)
-        cr.move_to(x + 1.5, y + 1.5)
-        PangoCairo.show_layout(cr, layout)
-
-        # Text
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.98)
-        cr.move_to(x, y)
-        PangoCairo.show_layout(cr, layout)
-
-        # Sub-Line: Weather & Battery Pill
-        weather_text = f"⛅ {self.weather_info['temp']}°C  {self.weather_info['condition']}"
-        bat_icon = "⚡" if self.battery_state in [1, 4] else "🔋"
-        status_text = f"{weather_text}   •   {bat_icon} {self.battery_pct}%   •   {self.cpu_temp}°C"
-
-        sub_layout = self.create_pango_layout(status_text)
-        sub_desc = Pango.FontDescription("Google Sans 13")
-        sub_layout.set_font_description(sub_desc)
-
-        # Shadow
-        cr.set_source_rgba(0, 0, 0, 0.45)
-        cr.move_to(x + 1.5, y + 36.5)
-        PangoCairo.show_layout(cr, sub_layout)
-
-        # Text
-        cr.set_source_rgba(0.90, 0.92, 0.95, 0.88)
-        cr.move_to(x, y + 35)
-        PangoCairo.show_layout(cr, sub_layout)
-
-        cr.restore()
-
-    def draw_pixel_clock(self, cr):
-        """Material Design 3 Frosted Glass Pill Clock."""
+    def draw_clock_widgets(self, cr):
+        """Top Left: Pink Pebble Hour + Soft Cyan Minute Card."""
         x = CLOCK_X
         y = CLOCK_Y
-        w = CLOCK_W
-        h = CLOCK_H
-        radius = h / 2
 
-        cr.save()
-
-        # Pill Background (Material You Surface Container High)
-        self.draw_rounded_pill(cr, x, y, w, h, radius)
-        # Frosted glass fill
-        cr.set_source_rgba(0.11, 0.13, 0.16, 0.68)
+        # 1. Hour Pebble (Soft Pastel Pink #FFD6DC)
+        self.draw_pebble(cr, x, y, 114, 100)
+        cr.set_source_rgba(1.0, 0.84, 0.86, 0.95)
         cr.fill_preserve()
-
-        # Glass Rim Stroke
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.14)
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.8)
         cr.set_line_width(1.0)
         cr.stroke()
 
-        # Inner subtle gradient
-        self.draw_rounded_pill(cr, x + 1, y + 1, w - 2, h - 2, radius - 1)
-        pat = cairo.LinearGradient(x, y, x, y + h)
-        pat.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, 0.08)
-        pat.add_color_stop_rgba(1.0, 1.0, 1.0, 1.0, 0.00)
+        layout = self.create_pango_layout(self.hour_str)
+        layout.set_font_description(Pango.FontDescription("Google Sans Bold 44"))
+        _, log_rect = layout.get_pixel_extents()
+        cr.set_source_rgba(0.24, 0.12, 0.18, 0.95)  # Dark purple text
+        cr.move_to(x + (114 - log_rect.width) / 2, y + (100 - log_rect.height) / 2 - 2)
+        PangoCairo.show_layout(cr, layout)
+
+        # 2. Minute Card (Soft Pastel Sky Cyan #D8F1FA)
+        x2 = x + 124
+        self.draw_rounded_card(cr, x2, y, 130, 100, 26)
+        cr.set_source_rgba(0.85, 0.95, 0.98, 0.95)
+        cr.fill_preserve()
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.8)
+        cr.set_line_width(1.0)
+        cr.stroke()
+
+        layout2 = self.create_pango_layout(self.min_str)
+        layout2.set_font_description(Pango.FontDescription("Google Sans Bold 44"))
+        _, log_rect2 = layout2.get_pixel_extents()
+        cr.set_source_rgba(0.08, 0.18, 0.24, 0.95)  # Dark navy text
+        cr.move_to(x2 + (130 - log_rect2.width) / 2, y + (100 - log_rect2.height) / 2 - 2)
+        PangoCairo.show_layout(cr, layout2)
+
+    def draw_weather_battery(self, cr):
+        """Top Left: Weather Asymmetric Pebble + Scalloped Rosette Battery."""
+        x = WEATHER_BAT_X
+        y = WEATHER_BAT_Y
+
+        # 1. Weather Pebble Card
+        self.draw_rounded_card(cr, x, y, 126, 76, 26)
+        cr.set_source_rgba(1.0, 0.98, 0.97, 0.95)
+        cr.fill_preserve()
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.9)
+        cr.set_line_width(1.0)
+        cr.stroke()
+
+        # Sun/Cloud Emoji/Icon
+        l_icon = self.create_pango_layout("⛅")
+        l_icon.set_font_description(Pango.FontDescription("20"))
+        cr.move_to(x + 18, y + 22)
+        PangoCairo.show_layout(cr, l_icon)
+
+        # Temperature Text
+        l_temp = self.create_pango_layout(f"{self.weather_temp}°")
+        l_temp.set_font_description(Pango.FontDescription("Google Sans Bold 23"))
+        cr.set_source_rgba(0.12, 0.16, 0.22, 0.95)
+        cr.move_to(x + 58, y + 21)
+        PangoCairo.show_layout(cr, l_temp)
+
+        # 2. Scalloped Rosette Battery Badge
+        x2 = x + 138
+        xc = x2 + 48
+        yc = y + 40
+        self.draw_scalloped_flower(cr, xc, yc, r0=40, A=4.0, N=12)
+        cr.set_source_rgba(1.0, 0.98, 0.97, 0.96)
+        cr.fill_preserve()
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.9)
+        cr.set_line_width(1.0)
+        cr.stroke()
+
+        # Percentage Text
+        l_bat = self.create_pango_layout(f"{self.battery_pct}%")
+        l_bat.set_font_description(Pango.FontDescription("Google Sans Bold 18"))
+        _, bat_rect = l_bat.get_pixel_extents()
+        cr.set_source_rgba(0.10, 0.18, 0.24, 0.95)
+        cr.move_to(xc - bat_rect.width / 2, yc - bat_rect.height / 2 - 8)
+        PangoCairo.show_layout(cr, l_bat)
+
+        # Sub-badge (Pink Pill)
+        pill_w = 64
+        pill_h = 16
+        pill_x = xc - pill_w / 2
+        pill_y = yc + 12
+        self.draw_rounded_card(cr, pill_x, pill_y, pill_w, pill_h, 8)
+        cr.set_source_rgba(1.0, 0.88, 0.90, 0.95)
+        cr.fill()
+
+        state_str = "Charging" if self.battery_state in [1, 4] else "Bypass 60W"
+        l_st = self.create_pango_layout(state_str)
+        l_st.set_font_description(Pango.FontDescription("Google Sans Bold 8"))
+        _, st_rect = l_st.get_pixel_extents()
+        cr.set_source_rgba(0.60, 0.20, 0.30, 0.95)
+        cr.move_to(pill_x + (pill_w - st_rect.width) / 2, pill_y + 1)
+        PangoCairo.show_layout(cr, l_st)
+
+    def draw_music_player(self, cr):
+        """Bottom Left: Music Player Card."""
+        x = MUSIC_X
+        y = MUSIC_Y
+        w = MUSIC_W
+        h = MUSIC_H
+
+        self.draw_rounded_card(cr, x, y, w, h, 22)
+        cr.set_source_rgba(1.0, 0.98, 0.97, 0.94)
+        cr.fill_preserve()
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.8)
+        cr.set_line_width(1.0)
+        cr.stroke()
+
+        # Album Art Thumbnail (Pink/Cyan Gradient background with cat avatar/icon)
+        thumb_s = 58
+        tx = x + 14
+        ty = y + 14
+        self.draw_rounded_card(cr, tx, ty, thumb_s, thumb_s, 16)
+        pat = cairo.LinearGradient(tx, ty, tx + thumb_s, ty + thumb_s)
+        pat.add_color_stop_rgb(0.0, 0.20, 0.15, 0.35)
+        pat.add_color_stop_rgb(1.0, 0.45, 0.25, 0.55)
         cr.set_source(pat)
         cr.fill()
 
-        # Clock Text: Google Sans Bold
-        layout = self.create_pango_layout(self.current_time_str)
-        desc = Pango.FontDescription("Google Sans Bold 56")
-        layout.set_font_description(desc)
+        l_cat = self.create_pango_layout("🎧")
+        l_cat.set_font_description(Pango.FontDescription("20"))
+        cr.move_to(tx + 16, ty + 14)
+        PangoCairo.show_layout(cr, l_cat)
 
-        ink_rect, log_rect = layout.get_pixel_extents()
-        text_w = log_rect.width
-        text_h = log_rect.height
+        # Track Title
+        title = self.media_title
+        if len(title) > 18:
+            title = title[:17] + "…"
+        lt = self.create_pango_layout(title)
+        lt.set_font_description(Pango.FontDescription("Google Sans Bold 13"))
+        cr.set_source_rgba(0.12, 0.16, 0.24, 0.95)
+        cr.move_to(x + 82, y + 22)
+        PangoCairo.show_layout(cr, lt)
 
-        text_x = x + (w - text_w) / 2
-        text_y = y + (h - text_h) / 2 - 2
+        # Artist
+        artist = self.media_artist
+        if len(artist) > 22:
+            artist = artist[:21] + "…"
+        la = self.create_pango_layout(artist)
+        la.set_font_description(Pango.FontDescription("Google Sans 11"))
+        cr.set_source_rgba(0.45, 0.50, 0.58, 0.90)
+        cr.move_to(x + 82, y + 44)
+        PangoCairo.show_layout(cr, la)
 
-        # Soft text shadow
-        cr.set_source_rgba(0, 0, 0, 0.35)
-        cr.move_to(text_x + 2, text_y + 2)
-        PangoCairo.show_layout(cr, layout)
+        # Play/Pause Pill Button (Dark Navy #112230)
+        bx = x + w - 52
+        by = y + 20
+        bw = 40
+        bh = 46
+        self.draw_rounded_card(cr, bx, by, bw, bh, 16)
+        cr.set_source_rgba(0.08, 0.15, 0.22, 0.95)
+        cr.fill()
 
-        # Pastel Accent Color (Android 15 M3 Primary Accent #c2e7ff)
-        cr.set_source_rgba(0.76, 0.90, 1.0, 0.98)
-        cr.move_to(text_x, text_y)
-        PangoCairo.show_layout(cr, layout)
+        play_icon = "⏸" if self.media_playing else "▶"
+        l_btn = self.create_pango_layout(play_icon)
+        l_btn.set_font_description(Pango.FontDescription("16"))
+        _, b_rect = l_btn.get_pixel_extents()
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.98)
+        cr.move_to(bx + (bw - b_rect.width) / 2, by + (bh - b_rect.height) / 2 - 1)
+        PangoCairo.show_layout(cr, l_btn)
 
-        cr.restore()
+    def draw_calendar_card(self, cr):
+        """Bottom Left: Avatar + Calendar Card."""
+        x = CALENDAR_X
+        y = CALENDAR_Y
+        w = CALENDAR_W
+        h = CALENDAR_H
 
-    def render_svg_icon(self, handle, cr, x, y, width, height):
-        if not handle:
-            return
-        cr.save()
-        if hasattr(handle, "render_document"):
-            rect = Rsvg.Rectangle()
-            rect.x = x
-            rect.y = y
-            rect.width = width
-            rect.height = height
-            handle.render_document(cr, rect)
-        else:
-            cr.translate(x, y)
-            dims = handle.get_dimensions()
-            cr.scale(width / dims.width, height / dims.height)
-            handle.render_cairo(cr)
-        cr.restore()
-
-    def draw_search_bar(self, cr):
-        """Google Pixel Pill Search Bar with 4-color 'G', Mic, and Lens."""
-        x = SEARCH_X
-        y = SEARCH_Y
-        w = SEARCH_W
-        h = SEARCH_H
-        radius = h / 2
-
-        cr.save()
-
-        # Pill Background
-        self.draw_rounded_pill(cr, x, y, w, h, radius)
-        # Glow / Active highlight if search is active
-        if self.search_active:
-            cr.set_source_rgba(0.14, 0.17, 0.22, 0.88)
-        else:
-            cr.set_source_rgba(0.10, 0.12, 0.16, 0.72)
+        self.draw_rounded_card(cr, x, y, w, h, 26)
+        cr.set_source_rgba(1.0, 0.98, 0.97, 0.95)
         cr.fill_preserve()
-
-        # Border Stroke
-        if self.search_active:
-            cr.set_source_rgba(0.66, 0.78, 0.98, 0.75)  # M3 Primary Accent border
-            cr.set_line_width(1.5)
-        else:
-            cr.set_source_rgba(1.0, 1.0, 1.0, 0.16)
-            cr.set_line_width(1.0)
-        cr.stroke()
-
-        # 1. Draw 4-color Google 'G' Logo on Left
-        if self.icon_g:
-            self.render_svg_icon(self.icon_g, cr, x + 16, y + 13, 28, 28)
-
-        # 2. Draw Placeholder Text if NOT searching
-        if not self.search_active:
-            layout = self.create_pango_layout("Search device or Google...")
-            desc = Pango.FontDescription("Google Sans 14")
-            layout.set_font_description(desc)
-
-            cr.set_source_rgba(0.85, 0.88, 0.92, 0.65)
-            cr.move_to(x + 58, y + 17)
-            PangoCairo.show_layout(cr, layout)
-
-        # 3. Draw Google Assistant Mic Icon
-        if self.icon_mic:
-            self.render_svg_icon(self.icon_mic, cr, x + w - 74, y + 15, 24, 24)
-
-        # 4. Draw Google Lens Icon
-        if self.icon_lens:
-            self.render_svg_icon(self.icon_lens, cr, x + w - 40, y + 15, 24, 24)
-
-        cr.restore()
-
-    def draw_media_player(self, cr):
-        """Material You Floating Media Player Pill."""
-        x = MEDIA_X
-        y = MEDIA_Y
-        w = MEDIA_W
-        h = MEDIA_H
-        radius = 24
-
-        cr.save()
-
-        # Rounded Container
-        self.draw_rounded_pill(cr, x, y, w, h, radius)
-        cr.set_source_rgba(0.12, 0.15, 0.19, 0.82)
-        cr.fill_preserve()
-
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.14)
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.8)
         cr.set_line_width(1.0)
         cr.stroke()
 
-        # Music Note / Album Art Thumbnail Pill
-        thumb_x = x + 12
-        thumb_y = y + 12
-        thumb_size = h - 24
-        self.draw_rounded_pill(cr, thumb_x, thumb_y, thumb_size, thumb_size, 14)
-        cr.set_source_rgba(0.66, 0.78, 0.98, 0.35)
+        # Left: Avatar Box
+        av_w = 110
+        av_h = 175
+        av_x = x + 15
+        av_y = y + 15
+        self.draw_rounded_card(cr, av_x, av_y, av_w, av_h, 20)
+        # Deep cosmic gradient matching the cat art
+        pat = cairo.LinearGradient(av_x, av_y, av_x + av_w, av_y + av_h)
+        pat.add_color_stop_rgb(0.0, 0.15, 0.12, 0.28)
+        pat.add_color_stop_rgb(0.5, 0.28, 0.18, 0.45)
+        pat.add_color_stop_rgb(1.0, 0.10, 0.08, 0.22)
+        cr.set_source(pat)
         cr.fill()
 
-        # Music Icon
-        layout_icon = self.create_pango_layout("🎵")
-        layout_icon.set_font_description(Pango.FontDescription("18"))
-        cr.move_to(thumb_x + 13, thumb_y + 11)
-        PangoCairo.show_layout(cr, layout_icon)
+        # Avatar Cat with Headphones Icon
+        l_av = self.create_pango_layout("🐱\n🎧")
+        l_av.set_font_description(Pango.FontDescription("32"))
+        l_av.set_alignment(Pango.Alignment.CENTER)
+        _, av_rect = l_av.get_pixel_extents()
+        cr.move_to(av_x + (av_w - av_rect.width) / 2, av_y + (av_h - av_rect.height) / 2)
+        PangoCairo.show_layout(cr, l_av)
 
-        # Title Text (truncated)
-        title = self.media_title
-        if len(title) > 28:
-            title = title[:27] + "…"
-        layout_t = self.create_pango_layout(title)
-        layout_t.set_font_description(Pango.FontDescription("Google Sans Medium 14"))
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.95)
-        cr.move_to(x + thumb_size + 24, y + 16)
-        PangoCairo.show_layout(cr, layout_t)
+        # Right: Calendar Grid
+        cal_x = x + 138
+        cal_y = y + 15
+        days = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+        col_w = 26
+        row_h = 24
 
-        # Artist Text
-        artist = self.media_artist
-        if len(artist) > 34:
-            artist = artist[:33] + "…"
-        layout_a = self.create_pango_layout(artist)
-        layout_a.set_font_description(Pango.FontDescription("Google Sans 12"))
-        cr.set_source_rgba(0.80, 0.84, 0.88, 0.70)
-        cr.move_to(x + thumb_size + 24, y + 38)
-        PangoCairo.show_layout(cr, layout_a)
+        # Header
+        for i, d in enumerate(days):
+            ld = self.create_pango_layout(d)
+            ld.set_font_description(Pango.FontDescription("Google Sans Bold 9"))
+            cr.set_source_rgba(0.01, 0.52, 0.78, 0.95)  # Cyan #0284c7
+            cr.move_to(cal_x + i * col_w, cal_y)
+            PangoCairo.show_layout(cr, ld)
 
-        # Play/Pause indicator
-        btn_layout = self.create_pango_layout("⏸")
-        btn_layout.set_font_description(Pango.FontDescription("16"))
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.85)
-        cr.move_to(x + w - 38, y + 25)
-        PangoCairo.show_layout(cr, btn_layout)
+        # Monthly days
+        now = datetime.datetime.now()
+        year, month, today = now.year, now.month, now.day
+        cal = calendar.Calendar(firstweekday=6)
+        month_days = cal.monthdayscalendar(year, month)
 
-        cr.restore()
+        grid_start_y = cal_y + 22
+        for r_idx, week in enumerate(month_days):
+            for c_idx, day_num in enumerate(week):
+                if day_num == 0:
+                    continue
+                dx = cal_x + c_idx * col_w
+                dy = grid_start_y + r_idx * row_h
+
+                if day_num == today:
+                    # Circle today with soft pink pill
+                    cr.new_sub_path()
+                    cr.arc(dx + 9, dy + 9, 10, 0, 2 * math.pi)
+                    cr.set_source_rgba(1.0, 0.85, 0.88, 0.95)
+                    cr.fill()
+
+                lt = self.create_pango_layout(str(day_num))
+                font_weight = "Bold" if day_num == today else "Medium"
+                lt.set_font_description(Pango.FontDescription(f"Google Sans {font_weight} 9.5"))
+                _, num_rect = lt.get_pixel_extents()
+                if day_num == today:
+                    cr.set_source_rgba(0.75, 0.15, 0.30, 0.95)  # Rose text
+                else:
+                    cr.set_source_rgba(0.25, 0.30, 0.38, 0.90)
+                cr.move_to(dx + 9 - num_rect.width / 2, dy + 9 - num_rect.height / 2)
+                PangoCairo.show_layout(cr, lt)
+
+    def draw_corner_buttons(self, cr):
+        """Bottom Left Corner: Power Button (soft blue) + Chat Button (soft pink)."""
+        x = CORNER_BTN_X
+        y = CORNER_BTN_Y
+        btn_s = 48
+
+        # 1. Power Button (Soft Blue #D8F1FA)
+        self.draw_rounded_card(cr, x, y, btn_s, btn_s, 16)
+        cr.set_source_rgba(0.85, 0.95, 0.98, 0.95)
+        cr.fill_preserve()
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.8)
+        cr.stroke()
+
+        lp = self.create_pango_layout("⏻")
+        lp.set_font_description(Pango.FontDescription("18"))
+        _, pr = lp.get_pixel_extents()
+        cr.set_source_rgba(0.01, 0.52, 0.78, 0.95)
+        cr.move_to(x + (btn_s - pr.width) / 2, y + (btn_s - pr.height) / 2)
+        PangoCairo.show_layout(cr, lp)
+
+        # 2. Chat Button (Soft Pink #FFD6DC)
+        x2 = x + 58
+        self.draw_rounded_card(cr, x2, y, btn_s, btn_s, 16)
+        cr.set_source_rgba(1.0, 0.84, 0.86, 0.95)
+        cr.fill_preserve()
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.8)
+        cr.stroke()
+
+        lc = self.create_pango_layout("💬")
+        lc.set_font_description(Pango.FontDescription("18"))
+        _, cr_rect = lc.get_pixel_extents()
+        cr.move_to(x2 + (btn_s - cr_rect.width) / 2, y + (btn_s - cr_rect.height) / 2)
+        PangoCairo.show_layout(cr, lc)
+
+    def draw_date_notes(self, cr):
+        """Top Right: Date Block + Groceries Notes Card."""
+        x = DATE_NOTES_X
+        y = DATE_NOTES_Y
+        w = DATE_NOTES_W
+        h = DATE_NOTES_H
+
+        self.draw_rounded_card(cr, x, y, w, h, 26)
+        cr.set_source_rgba(1.0, 0.98, 0.97, 0.95)
+        cr.fill_preserve()
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.8)
+        cr.stroke()
+
+        # Left: Date Block
+        lm = self.create_pango_layout(self.month_str)
+        lm.set_font_description(Pango.FontDescription("Google Sans Bold 13"))
+        cr.set_source_rgba(0.28, 0.35, 0.42, 0.95)
+        cr.move_to(x + 24, y + 26)
+        PangoCairo.show_layout(cr, lm)
+
+        ld = self.create_pango_layout(self.day_str)
+        ld.set_font_description(Pango.FontDescription("Google Sans Bold 48"))
+        cr.set_source_rgba(0.08, 0.16, 0.24, 0.98)
+        cr.move_to(x + 22, y + 46)
+        PangoCairo.show_layout(cr, ld)
+
+        # Right: Notes Pill Header (Soft Pink)
+        nx = x + 105
+        ny = y + 20
+        self.draw_rounded_card(cr, nx, ny, 195, 28, 14)
+        cr.set_source_rgba(1.0, 0.86, 0.88, 0.95)
+        cr.fill()
+
+        lnh = self.create_pango_layout("Groceries Notes")
+        lnh.set_font_description(Pango.FontDescription("Google Sans Bold 10"))
+        cr.set_source_rgba(0.70, 0.18, 0.28, 0.95)
+        cr.move_to(nx + 14, ny + 6)
+        PangoCairo.show_layout(cr, lnh)
+
+        # Notes Items
+        items = ["• Cold brew & almond milk", "• Fresh berries & oatmeal", "• Dark chocolate 85%"]
+        for i, item in enumerate(items):
+            li = self.create_pango_layout(item)
+            li.set_font_description(Pango.FontDescription("Google Sans 10.5"))
+            cr.set_source_rgba(0.28, 0.35, 0.42, 0.90)
+            cr.move_to(nx + 8, ny + 38 + i * 26)
+            PangoCairo.show_layout(cr, li)
+
+    def draw_quick_pills(self, cr):
+        """Top Right: 4 Pastel Folder Launcher Pills (2x2 Grid)."""
+        x = PILLS_X
+        y = PILLS_Y
+        pill_w = 158
+        pill_h = 46
+        gap_x = 14
+        gap_y = 12
+
+        pills_data = [
+            ("Downloads", "📥", 0.85, 0.95, 0.98, 0.01, 0.52, 0.78, 0, 0),
+            ("Documents", "📄", 1.00, 0.86, 0.88, 0.75, 0.15, 0.30, 1, 0),
+            ("Pictures", "🖼️", 0.92, 0.90, 0.98, 0.45, 0.25, 0.75, 0, 1),
+            ("Music", "🎵", 0.88, 0.95, 0.98, 0.01, 0.52, 0.78, 1, 1),
+        ]
+
+        for name, icon, bg_r, bg_g, bg_b, fg_r, fg_g, fg_b, col, row in pills_data:
+            px = x + col * (pill_w + gap_x)
+            py = y + row * (pill_h + gap_y)
+
+            self.draw_rounded_card(cr, px, py, pill_w, pill_h, 23)
+            cr.set_source_rgba(bg_r, bg_g, bg_b, 0.95)
+            cr.fill_preserve()
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.8)
+            cr.stroke()
+
+            # Icon
+            li = self.create_pango_layout(icon)
+            li.set_font_description(Pango.FontDescription("15"))
+            cr.move_to(px + 18, py + 12)
+            PangoCairo.show_layout(cr, li)
+
+            # Label
+            lt = self.create_pango_layout(name)
+            lt.set_font_description(Pango.FontDescription("Google Sans Bold 12"))
+            cr.set_source_rgba(fg_r, fg_g, fg_b, 0.95)
+            cr.move_to(px + 46, py + 14)
+            PangoCairo.show_layout(cr, lt)
+
+    def draw_control_center(self, cr):
+        """Bottom Right: Control Center Card."""
+        x = CONTROL_X
+        y = CONTROL_Y
+        w = CONTROL_W
+        h = CONTROL_H
+
+        self.draw_rounded_card(cr, x, y, w, h, 28)
+        cr.set_source_rgba(1.0, 0.98, 0.97, 0.95)
+        cr.fill_preserve()
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.8)
+        cr.stroke()
+
+        # Time Header
+        time_now = f"{self.hour_str}:{self.min_str}"
+        lt = self.create_pango_layout(time_now)
+        lt.set_font_description(Pango.FontDescription("Google Sans Bold 26"))
+        cr.set_source_rgba(0.08, 0.16, 0.24, 0.98)
+        cr.move_to(x + 22, y + 20)
+        PangoCairo.show_layout(cr, lt)
+
+        ld = self.create_pango_layout(self.weekday_str)
+        ld.set_font_description(Pango.FontDescription("Google Sans Medium 12"))
+        cr.set_source_rgba(0.45, 0.50, 0.58, 0.90)
+        cr.move_to(x + 22, y + 54)
+        PangoCairo.show_layout(cr, ld)
+
+        # Volume Slider Track
+        sx = x + 22
+        sy = y + 84
+        sw = w - 44
+        sh = 10
+        self.draw_rounded_card(cr, sx, sy, sw, sh, 5)
+        cr.set_source_rgba(0.88, 0.90, 0.92, 0.95)
+        cr.fill()
+
+        # Filled Track
+        fill_w = int(sw * (self.volume_level / 100.0))
+        if fill_w > 0:
+            self.draw_rounded_card(cr, sx, sy, fill_w, sh, 5)
+            cr.set_source_rgba(0.12, 0.18, 0.25, 0.95)
+            cr.fill()
+
+        # Slider Knob (Circle #D8F1FA)
+        knob_x = sx + fill_w
+        cr.new_sub_path()
+        cr.arc(knob_x, sy + 5, 9, 0, 2 * math.pi)
+        cr.set_source_rgba(0.85, 0.95, 0.98, 0.98)
+        cr.fill_preserve()
+        cr.set_source_rgba(0.12, 0.18, 0.25, 0.95)
+        cr.set_line_width(2.0)
+        cr.stroke()
+
+        # 6 Quick Toggle Tiles (2 columns x 3 rows, dark navy #162432)
+        tiles = [
+            ("📶 Wi-Fi", 0, 0),
+            ("ᛒ Bluetooth", 1, 0),
+            ("🌗 Dark Mode", 0, 1),
+            ("📡 Hotspot", 1, 1),
+            ("⚙️ Settings", 0, 2),
+            ("⚡ LiveSync", 1, 2)
+        ]
+        tw = (w - 56) / 2
+        th = 44
+        start_ty = y + 115
+
+        for label, col, row in tiles:
+            tx = x + 22 + col * (tw + 12)
+            ty = start_ty + row * (th + 10)
+
+            self.draw_rounded_card(cr, tx, ty, tw, th, 14)
+            cr.set_source_rgba(0.09, 0.15, 0.22, 0.95)
+            cr.fill()
+
+            lbl = self.create_pango_layout(label)
+            lbl.set_font_description(Pango.FontDescription("Google Sans Medium 11"))
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.95)
+            cr.move_to(tx + 14, ty + 12)
+            PangoCairo.show_layout(cr, lbl)
+
+        # Bottom Bar: Expand Chevron + Audio / Battery Stats
+        bby = y + h - 38
+        l_exp = self.create_pango_layout("⌃")
+        l_exp.set_font_description(Pango.FontDescription("Bold 18"))
+        cr.set_source_rgba(0.85, 0.35, 0.45, 0.95)  # Pink chevron
+        cr.move_to(x + 24, bby)
+        PangoCairo.show_layout(cr, l_exp)
+
+        stat_str = f"🔊 {self.volume_level}%   •   🔋 {self.battery_pct}%"
+        ls = self.create_pango_layout(stat_str)
+        ls.set_font_description(Pango.FontDescription("Google Sans Bold 11"))
+        cr.set_source_rgba(0.40, 0.48, 0.55, 0.95)
+        cr.move_to(x + w - 165, bby + 3)
+        PangoCairo.show_layout(cr, ls)
+
+    def draw_bottom_dock(self, cr):
+        """Bottom Floating Dock with Search Pill & Pastel App Icons."""
+        x = DOCK_X
+        y = DOCK_Y
+        w = DOCK_W
+        h = DOCK_H
+
+        # Floating Peach Pill Container
+        self.draw_rounded_card(cr, x, y, w, h, h / 2)
+        cr.set_source_rgba(0.99, 0.93, 0.91, 0.92)  # Warm peach frosted glass
+        cr.fill_preserve()
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.8)
+        cr.set_line_width(1.0)
+        cr.stroke()
+
+        # 1. 9-Dot App Drawer Button (Left)
+        l_drawer = self.create_pango_layout("⋮⋮⋮")
+        l_drawer.set_font_description(Pango.FontDescription("Bold 18"))
+        cr.set_source_rgba(0.85, 0.40, 0.50, 0.95)
+        cr.move_to(x + 18, y + 16)
+        PangoCairo.show_layout(cr, l_drawer)
+
+        # 2. Search Pill
+        sx = x + 56
+        sy = y + 10
+        sw = 210
+        sh = 40
+        self.draw_rounded_card(cr, sx, sy, sw, sh, sh / 2)
+        if self.search_active:
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.95)
+        else:
+            cr.set_source_rgba(0.92, 0.96, 0.98, 0.90)  # Soft cyan pill
+        cr.fill()
+
+        # Magnifying glass icon
+        l_mag = self.create_pango_layout("🔍")
+        l_mag.set_font_description(Pango.FontDescription("13"))
+        cr.move_to(sx + 14, sy + 11)
+        PangoCairo.show_layout(cr, l_mag)
+
+        if not self.search_active:
+            l_st = self.create_pango_layout("Search")
+            l_st.set_font_description(Pango.FontDescription("Google Sans Medium 12"))
+            cr.set_source_rgba(0.35, 0.42, 0.50, 0.85)
+            cr.move_to(sx + 40, sy + 11)
+            PangoCairo.show_layout(cr, l_st)
+
+        # 3. Pastel App Icons (Circular / Squircle badges)
+        icons = [
+            ("📷", 0.99, 0.85, 0.88),  # Pink Camera
+            ("⏰", 0.85, 0.95, 0.98),  # Cyan Clock
+            ("📁", 0.92, 0.90, 0.98),  # Lavender Files
+            ("⚙️", 0.88, 0.95, 0.98),  # Sky Settings
+            ("💬", 0.99, 0.85, 0.88),  # Pink WhatsApp
+            ("✈️", 0.85, 0.95, 0.98),  # Cyan Telegram
+            ("🌐", 0.92, 0.90, 0.98),  # Lavender Chrome
+            ("💻", 0.88, 0.95, 0.98),  # Sky Terminal
+        ]
+
+        start_ix = sx + sw + 16
+        for idx, (icon_glyph, ir, ig, ib) in enumerate(icons):
+            ix = start_ix + idx * 52
+            iy = y + 10
+            is_size = 40
+
+            self.draw_rounded_card(cr, ix, iy, is_size, is_size, 14)
+            cr.set_source_rgba(ir, ig, ib, 0.95)
+            cr.fill()
+
+            li = self.create_pango_layout(icon_glyph)
+            li.set_font_description(Pango.FontDescription("16"))
+            _, ir_box = li.get_pixel_extents()
+            cr.move_to(ix + (is_size - ir_box.width) / 2, iy + (is_size - ir_box.height) / 2 - 1)
+            PangoCairo.show_layout(cr, li)
 
     # -------------------------------------------------------------
     # Mouse & Keyboard Event Handlers
@@ -704,33 +1002,94 @@ class PixelDesktopWindow(Gtk.Window):
         x = event.x
         y = event.y
 
-        # 1. Search Bar Clicks
-        if SEARCH_X <= x <= SEARCH_X + SEARCH_W and SEARCH_Y <= y <= SEARCH_Y + SEARCH_H:
-            # Check if clicked on Mic
-            if x >= SEARCH_X + SEARCH_W - 80 and x < SEARCH_X + SEARCH_W - 46:
-                subprocess.Popen(["google-chrome", "https://www.google.com"])
+        # 1. Corner Action Buttons
+        if CORNER_BTN_X <= x <= CORNER_BTN_X + 115 and CORNER_BTN_Y <= y <= CORNER_BTN_Y + 52:
+            if x <= CORNER_BTN_X + 50:
+                subprocess.Popen(["cinnamon-session-quit"])
+            else:
+                subprocess.Popen(["/home/teddy/Applications/whatsmulti/whatsmulti"])
+            return True
+
+        # 2. 4 Quick Launcher Pills
+        if PILLS_X <= x <= PILLS_X + DATE_NOTES_W and PILLS_Y <= y <= PILLS_Y + 110:
+            col = 0 if x < PILLS_X + 165 else 1
+            row = 0 if y < PILLS_Y + 52 else 1
+            paths = {
+                (0, 0): os.path.expanduser("~/Downloads"),
+                (1, 0): os.path.expanduser("~/Documents"),
+                (0, 1): os.path.expanduser("~/Pictures"),
+                (1, 1): os.path.expanduser("~/Music"),
+            }
+            target = paths.get((col, row))
+            if target:
+                subprocess.Popen(["nemo", target])
+            return True
+
+        # 3. Control Center Settings Button
+        if CONTROL_X <= x <= CONTROL_X + CONTROL_W and CONTROL_Y <= y <= CONTROL_Y + CONTROL_H:
+            # Check volume slider click
+            if CONTROL_Y + 75 <= y <= CONTROL_Y + 105:
+                sx = CONTROL_X + 22
+                sw = CONTROL_W - 44
+                pct = max(0, min(100, int((x - sx) / sw * 100)))
+                self.volume_level = pct
+                subprocess.Popen(["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{pct}%"])
+                self.queue_draw_area(CONTROL_X, CONTROL_Y, CONTROL_W, CONTROL_H)
                 return True
-            # Check if clicked on Lens
-            if x >= SEARCH_X + SEARCH_W - 46:
-                subprocess.Popen(["google-chrome", "https://lens.google.com"])
+            # Check Quick Toggles
+            if CONTROL_Y + 115 <= y <= CONTROL_Y + 280:
+                subprocess.Popen(["cinnamon-settings"])
                 return True
 
-            # Clicked on Search Input area -> Activate Entry
-            self.activate_search()
+        # 4. Music Player Play/Pause
+        if MUSIC_X <= x <= MUSIC_X + MUSIC_W and MUSIC_Y <= y <= MUSIC_Y + MUSIC_H:
+            if self.media_player_bus:
+                try:
+                    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+                    p = Gio.DBusProxy.new_sync(
+                        bus, Gio.DBusProxyFlags.NONE, None,
+                        self.media_player_bus,
+                        "/org/mpris/MediaPlayer2",
+                        "org.mpris.MediaPlayer2.Player",
+                        None
+                    )
+                    p.call_sync("PlayPause", None, Gio.DBusCallFlags.NONE, -1, None)
+                except Exception:
+                    pass
             return True
 
-        # 2. Media Player Clicks
-        if self.media_playing and MEDIA_X <= x <= MEDIA_X + MEDIA_W and MEDIA_Y <= y <= MEDIA_Y + MEDIA_H:
-            if self.media_player_name:
-                self.mpris_toggle_play_pause(self.media_player_name)
-            return True
+        # 5. Bottom Dock Search & App Launches
+        if DOCK_X <= x <= DOCK_X + DOCK_W and DOCK_Y <= y <= DOCK_Y + DOCK_H:
+            # Search Pill
+            sx = DOCK_X + 56
+            if sx <= x <= sx + 210:
+                self.activate_search()
+                return True
 
-        # 3. At a Glance Click -> Open Weather / Calendar
-        if AT_A_GLANCE_X <= x <= AT_A_GLANCE_X + AT_A_GLANCE_W and AT_A_GLANCE_Y <= y <= AT_A_GLANCE_Y + AT_A_GLANCE_H:
-            self.fetch_weather_async()
-            return True
+            # App Drawer Button (Left)
+            if x < sx:
+                subprocess.Popen(["cinnamon-menu"])
+                return True
 
-        # Clicked outside active search -> Deactivate
+            # App Icons
+            start_ix = sx + 226
+            if x >= start_ix:
+                app_idx = int((x - start_ix) / 52)
+                app_cmds = [
+                    ["cheese"],                                            # Camera
+                    ["gnome-clocks"],                                      # Clock
+                    ["nemo"],                                              # Files
+                    ["cinnamon-settings"],                                 # Settings
+                    ["/home/teddy/Applications/whatsmulti/whatsmulti"],     # WhatsMulti
+                    ["telegram-desktop"],                                  # Telegram
+                    ["google-chrome"],                                     # Chrome
+                    ["gnome-terminal"]                                     # Terminal
+                ]
+                if 0 <= app_idx < len(app_cmds):
+                    subprocess.Popen(app_cmds[app_idx])
+                    return True
+
+        # Click outside active search
         if self.search_active:
             self.deactivate_search()
 
@@ -740,13 +1099,13 @@ class PixelDesktopWindow(Gtk.Window):
         self.search_active = True
         self.search_entry.show()
         self.search_entry.grab_focus()
-        self.queue_draw_area(SEARCH_X - 10, SEARCH_Y - 10, SEARCH_W + 20, SEARCH_H + 20)
+        self.queue_draw_area(DOCK_X, DOCK_Y, DOCK_W, DOCK_H)
 
     def deactivate_search(self):
         self.search_active = False
         self.search_entry.set_text("")
         self.search_entry.hide()
-        self.queue_draw_area(SEARCH_X - 10, SEARCH_Y - 10, SEARCH_W + 20, SEARCH_H + 20)
+        self.queue_draw_area(DOCK_X, DOCK_Y, DOCK_W, DOCK_H)
 
     def on_search_focus_out(self, widget, event):
         if self.search_active:
@@ -765,56 +1124,30 @@ class PixelDesktopWindow(Gtk.Window):
         if not query:
             return
 
-        # App Launcher keywords
         apps_map = {
             "whatsmulti": ["/home/teddy/Applications/whatsmulti/whatsmulti"],
             "whatsapp": ["/home/teddy/Applications/whatsmulti/whatsmulti"],
             "terminal": ["gnome-terminal"],
             "files": ["nemo"],
-            "nemo": ["nemo"],
             "chrome": ["google-chrome"],
             "settings": ["cinnamon-settings"],
-            "calculator": ["gnome-calculator"],
-            "music": ["youtube-music"],
-            "code": ["code"]
+            "music": ["youtube-music"]
         }
+        if query.lower() in apps_map:
+            subprocess.Popen(apps_map[query.lower()])
+            return
 
-        q_lower = query.lower()
-        if q_lower in apps_map:
-            try:
-                subprocess.Popen(apps_map[q_lower])
-                return
-            except Exception:
-                pass
-
-        # Otherwise launch Google Search in Chrome
         encoded = urllib.request.quote(query)
-        url = f"https://www.google.com/search?q={encoded}"
-        subprocess.Popen(["google-chrome", url])
-
-    def mpris_toggle_play_pause(self, bus_name):
-        try:
-            bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-            player = Gio.DBusProxy.new_sync(
-                bus, Gio.DBusProxyFlags.NONE, None,
-                bus_name,
-                "/org/mpris/MediaPlayer2",
-                "org.mpris.MediaPlayer2.Player",
-                None
-            )
-            player.call_sync("PlayPause", None, Gio.DBusCallFlags.NONE, -1, None)
-        except Exception as e:
-            print(f"[PixelDesktop] MPRIS toggle error: {e}")
+        subprocess.Popen(["google-chrome", f"https://www.google.com/search?q={encoded}"])
 
 
 def main():
-    # Make executable react to SIGINT / SIGTERM cleanly
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     signal.signal(signal.SIGTERM, lambda s, f: Gtk.main_quit())
 
-    win = PixelDesktopWindow()
+    win = MaterialYouDesktop()
     win.show_all()
-    win.search_entry.hide()  # Entry starts hidden
+    win.search_entry.hide()
     Gtk.main()
 
 if __name__ == '__main__':
