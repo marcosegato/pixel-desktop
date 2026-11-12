@@ -181,18 +181,18 @@ class PixelRecentApps(Gtk.Window):
 
         self.windows = valid
         if self.windows:
-            active_idx = 0
-            for idx, item in enumerate(self.windows):
-                if item.is_active:
-                    active_idx = idx
-                    break
-            self.current_idx = active_idx
+            # If 2 or more windows exist, pre-select the 2nd window (index 1 / previous active)
+            # so the user can immediately switch with Enter or cycle with Super+Tab
+            if len(self.windows) > 1:
+                self.current_idx = 1
+            else:
+                self.current_idx = 0
         else:
             self.current_idx = 0
 
-        self.target_scroll_x = 0.0
-        self.scroll_x = 0.0
-        self._update_target_scroll()
+        self.target_scroll_x = - (self.current_idx * CARD_STRIDE)
+        self.scroll_x = self.target_scroll_x
+        self.queue_draw()
 
     def _update_target_scroll(self):
         if not self.windows:
@@ -231,7 +231,11 @@ class PixelRecentApps(Gtk.Window):
 
     def toggle_switcher(self):
         if self.is_visible():
-            self.hide_switcher()
+            if self.windows and len(self.windows) > 1:
+                self.current_idx = (self.current_idx + 1) % len(self.windows)
+                self._update_target_scroll()
+            else:
+                self.hide_switcher()
         else:
             self.show_switcher()
 
