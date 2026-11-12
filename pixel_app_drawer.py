@@ -395,8 +395,6 @@ class PixelAppDrawer(Gtk.Window):
         # 1.5 Web & AI Action Chips (Compact row when apps match)
         self.action_chips_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.action_chips_box.get_style_context().add_class("action-chips-box")
-        self.action_chips_box.set_no_show_all(True)
-        self.action_chips_box.hide()
 
         # Google Search Action Chip
         self.google_chip = Gtk.Button()
@@ -437,6 +435,9 @@ class PixelAppDrawer(Gtk.Window):
         self.action_chips_box.pack_start(self.gemini_chip, False, False, 0)
 
         self.root_card.pack_start(self.action_chips_box, False, False, 0)
+        self.action_chips_box.show_all()
+        self.action_chips_box.set_no_show_all(True)
+        self.action_chips_box.hide()
 
         # 2. Suggested Apps Section ("Disarankan")
         self.suggested_header = Gtk.Label(label="SERING DIGUNAKAN")
@@ -490,8 +491,6 @@ class PixelAppDrawer(Gtk.Window):
         # 4. Universal Search Card (Shown when no local apps match)
         self.no_apps_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.no_apps_card.get_style_context().add_class("no-apps-card")
-        self.no_apps_card.set_no_show_all(True)
-        self.no_apps_card.hide()
         self.no_apps_card.set_vexpand(True)
 
         no_apps_head = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
@@ -563,6 +562,9 @@ class PixelAppDrawer(Gtk.Window):
         self.no_apps_card.pack_start(self.prominent_gemini_btn, False, False, 0)
 
         self.root_card.pack_start(self.no_apps_card, True, True, 0)
+        self.no_apps_card.show_all()
+        self.no_apps_card.set_no_show_all(True)
+        self.no_apps_card.hide()
 
     def _create_app_tile(self, name, icon, app_info, width=108):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
