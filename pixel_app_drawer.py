@@ -13,6 +13,7 @@ import subprocess
 import cairo
 import json
 import time
+import urllib.parse
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -205,6 +206,79 @@ class PixelAppDrawer(Gtk.Window):
             letter-spacing: 1.5px;
             margin: 10px 24px 6px 24px;
         }}
+        .action-chips-box {{
+            margin: 0px 20px 8px 20px;
+        }}
+        .action-chip {{
+            background-color: {card_bg};
+            border-radius: 999px;
+            border: 1px solid {border_color};
+            padding: 5px 14px;
+            transition: all 120ms ease;
+        }}
+        .action-chip:hover, .action-chip:focus {{
+            background-color: {hover_bg};
+            border: 1px solid {accent_peach};
+        }}
+        .action-chip-label {{
+            color: {text_primary};
+            font-family: 'Google Sans', 'Roboto', sans-serif;
+            font-size: 12px;
+            font-weight: 500;
+        }}
+        .action-chip-badge {{
+            background-color: {accent_peach};
+            color: {bg_color};
+            font-family: 'Google Sans', 'Roboto', sans-serif;
+            font-size: 9.5px;
+            font-weight: 700;
+            border-radius: 999px;
+            padding: 1px 7px;
+            margin-left: 6px;
+        }}
+        .no-apps-card {{
+            background-color: {card_bg};
+            border-radius: 24px;
+            border: 1px solid {border_color};
+            padding: 24px;
+            margin: 10px 20px 20px 20px;
+        }}
+        .no-apps-title {{
+            color: {text_primary};
+            font-family: 'Google Sans', 'Roboto', sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+        }}
+        .no-apps-desc {{
+            color: {text_secondary};
+            font-family: 'Google Sans', 'Roboto', sans-serif;
+            font-size: 12px;
+            margin-top: 2px;
+            margin-bottom: 18px;
+        }}
+        .prominent-btn {{
+            background-color: {card_bg};
+            border-radius: 16px;
+            border: 1.5px solid {border_color};
+            padding: 12px 18px;
+            transition: all 140ms ease;
+        }}
+        .prominent-btn:hover, .prominent-btn:focus {{
+            background-color: {hover_bg};
+            border: 1.5px solid {accent_peach};
+        }}
+        .prominent-title {{
+            color: {text_primary};
+            font-family: 'Google Sans', 'Roboto', sans-serif;
+            font-size: 13.5px;
+            font-weight: 700;
+        }}
+        .prominent-desc {{
+            color: {text_secondary};
+            font-family: 'Google Sans', 'Roboto', sans-serif;
+            font-size: 11px;
+            margin-top: 2px;
+        }}
         .suggested-box {{
             margin: 4px 20px 12px 20px;
         }}
@@ -287,13 +361,14 @@ class PixelAppDrawer(Gtk.Window):
         self.search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.search_box.get_style_context().add_class("search-container")
 
-        search_icon = Gtk.Label(label="🔍")
+        search_icon = Gtk.Label()
+        search_icon.set_markup('<span foreground="#4285F4" font_family="Google Sans" font_weight="bold" font_size="13pt">G</span>')
         search_icon.get_style_context().add_class("search-icon")
         self.search_box.pack_start(search_icon, False, False, 0)
 
         self.search_entry = Gtk.Entry()
         self.search_entry.get_style_context().add_class("search-entry")
-        self.search_entry.set_placeholder_text("Telusuri aplikasi, setelan, atau berkas...")
+        self.search_entry.set_placeholder_text("Telusuri aplikasi, Google, atau tanya Gemini (?)...")
         self.search_entry.set_hexpand(True)
         self.search_entry.connect("changed", self._on_search_changed)
         self.search_entry.connect("activate", self._on_search_activate)
@@ -316,6 +391,52 @@ class PixelAppDrawer(Gtk.Window):
         self.search_box.pack_end(power_btn, False, False, 2)
 
         self.root_card.pack_start(self.search_box, False, False, 0)
+
+        # 1.5 Web & AI Action Chips (Compact row when apps match)
+        self.action_chips_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.action_chips_box.get_style_context().add_class("action-chips-box")
+        self.action_chips_box.set_no_show_all(True)
+        self.action_chips_box.hide()
+
+        # Google Search Action Chip
+        self.google_chip = Gtk.Button()
+        self.google_chip.get_style_context().add_class("action-chip")
+        self.google_chip.set_relief(Gtk.ReliefStyle.NONE)
+        self.google_chip.set_can_focus(True)
+        g_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.google_chip_icon = Gtk.Label(label="🌐")
+        self.google_chip_label = Gtk.Label(label='Telusuri Google')
+        self.google_chip_label.get_style_context().add_class("action-chip-label")
+        self.google_chip_badge = Gtk.Label(label="↵ Enter")
+        self.google_chip_badge.get_style_context().add_class("action-chip-badge")
+        g_box.pack_start(self.google_chip_icon, False, False, 0)
+        g_box.pack_start(self.google_chip_label, False, False, 0)
+        g_box.pack_start(self.google_chip_badge, False, False, 0)
+        self.google_chip.add(g_box)
+        self.google_chip.connect("clicked", lambda b: self._launch_google_search(self.search_entry.get_text()))
+        self.google_chip.connect("key-press-event", lambda w, e: self._on_chip_key_press(w, e, "google"))
+        self.action_chips_box.pack_start(self.google_chip, False, False, 0)
+
+        # Gemini AI Action Chip
+        self.gemini_chip = Gtk.Button()
+        self.gemini_chip.get_style_context().add_class("action-chip")
+        self.gemini_chip.set_relief(Gtk.ReliefStyle.NONE)
+        self.gemini_chip.set_can_focus(True)
+        gm_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.gemini_chip_icon = Gtk.Label(label="✨")
+        self.gemini_chip_label = Gtk.Label(label='Tanya Gemini')
+        self.gemini_chip_label.get_style_context().add_class("action-chip-label")
+        self.gemini_chip_badge = Gtk.Label(label="AI")
+        self.gemini_chip_badge.get_style_context().add_class("action-chip-badge")
+        gm_box.pack_start(self.gemini_chip_icon, False, False, 0)
+        gm_box.pack_start(self.gemini_chip_label, False, False, 0)
+        gm_box.pack_start(self.gemini_chip_badge, False, False, 0)
+        self.gemini_chip.add(gm_box)
+        self.gemini_chip.connect("clicked", lambda b: self._launch_gemini(self.search_entry.get_text()))
+        self.gemini_chip.connect("key-press-event", lambda w, e: self._on_chip_key_press(w, e, "gemini"))
+        self.action_chips_box.pack_start(self.gemini_chip, False, False, 0)
+
+        self.root_card.pack_start(self.action_chips_box, False, False, 0)
 
         # 2. Suggested Apps Section ("Disarankan")
         self.suggested_header = Gtk.Label(label="SERING DIGUNAKAN")
@@ -365,6 +486,83 @@ class PixelAppDrawer(Gtk.Window):
 
         self.scrolled.add(flow_pad_box)
         self.root_card.pack_start(self.scrolled, True, True, 0)
+
+        # 4. Universal Search Card (Shown when no local apps match)
+        self.no_apps_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        self.no_apps_card.get_style_context().add_class("no-apps-card")
+        self.no_apps_card.set_no_show_all(True)
+        self.no_apps_card.hide()
+        self.no_apps_card.set_vexpand(True)
+
+        no_apps_head = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        self.no_apps_title = Gtk.Label(label="Pencarian Universal (Web & AI)")
+        self.no_apps_title.set_halign(Gtk.Align.START)
+        self.no_apps_title.get_style_context().add_class("no-apps-title")
+        self.no_apps_desc = Gtk.Label(label="Aplikasi lokal tidak ditemukan. Tekan Enter untuk mencari di Google atau tanyakan langsung ke Gemini AI.")
+        self.no_apps_desc.set_halign(Gtk.Align.START)
+        self.no_apps_desc.set_line_wrap(True)
+        self.no_apps_desc.get_style_context().add_class("no-apps-desc")
+        no_apps_head.pack_start(self.no_apps_title, False, False, 0)
+        no_apps_head.pack_start(self.no_apps_desc, False, False, 0)
+        self.no_apps_card.pack_start(no_apps_head, False, False, 0)
+
+        # Prominent Google Search Button Card
+        self.prominent_google_btn = Gtk.Button()
+        self.prominent_google_btn.get_style_context().add_class("prominent-btn")
+        self.prominent_google_btn.set_relief(Gtk.ReliefStyle.NONE)
+        self.prominent_google_btn.set_can_focus(True)
+        pg_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        pg_icon = Gtk.Label(label="🌐")
+        pg_icon.get_style_context().add_class("action-chip-icon")
+        pg_text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        self.prominent_google_title = Gtk.Label(label='Telusuri dengan Google')
+        self.prominent_google_title.set_halign(Gtk.Align.START)
+        self.prominent_google_title.get_style_context().add_class("prominent-title")
+        pg_desc = Gtk.Label(label='Buka hasil web lengkap beserta rangkuman Google Gemini AI Overview')
+        pg_desc.set_halign(Gtk.Align.START)
+        pg_desc.get_style_context().add_class("prominent-desc")
+        pg_text_box.pack_start(self.prominent_google_title, False, False, 0)
+        pg_text_box.pack_start(pg_desc, False, False, 0)
+        self.prominent_google_badge = Gtk.Label(label="↵ Enter")
+        self.prominent_google_badge.get_style_context().add_class("action-chip-badge")
+        self.prominent_google_badge.set_valign(Gtk.Align.CENTER)
+        pg_box.pack_start(pg_icon, False, False, 0)
+        pg_box.pack_start(pg_text_box, True, True, 0)
+        pg_box.pack_end(self.prominent_google_badge, False, False, 0)
+        self.prominent_google_btn.add(pg_box)
+        self.prominent_google_btn.connect("clicked", lambda b: self._launch_google_search(self.search_entry.get_text()))
+        self.prominent_google_btn.connect("key-press-event", lambda w, e: self._on_prominent_key_press(w, e, "google"))
+        self.no_apps_card.pack_start(self.prominent_google_btn, False, False, 0)
+
+        # Prominent Gemini AI Button Card
+        self.prominent_gemini_btn = Gtk.Button()
+        self.prominent_gemini_btn.get_style_context().add_class("prominent-btn")
+        self.prominent_gemini_btn.set_relief(Gtk.ReliefStyle.NONE)
+        self.prominent_gemini_btn.set_can_focus(True)
+        pgm_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        pgm_icon = Gtk.Label(label="✨")
+        pgm_icon.get_style_context().add_class("action-chip-icon")
+        pgm_text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        self.prominent_gemini_title = Gtk.Label(label='Tanya Gemini AI')
+        self.prominent_gemini_title.set_halign(Gtk.Align.START)
+        self.prominent_gemini_title.get_style_context().add_class("prominent-title")
+        pgm_desc = Gtk.Label(label='Buka Google Gemini di browser (pertanyaan otomatis disalin ke clipboard)')
+        pgm_desc.set_halign(Gtk.Align.START)
+        pgm_desc.get_style_context().add_class("prominent-desc")
+        pgm_text_box.pack_start(self.prominent_gemini_title, False, False, 0)
+        pgm_text_box.pack_start(pgm_desc, False, False, 0)
+        self.prominent_gemini_badge = Gtk.Label(label="AI")
+        self.prominent_gemini_badge.get_style_context().add_class("action-chip-badge")
+        self.prominent_gemini_badge.set_valign(Gtk.Align.CENTER)
+        pgm_box.pack_start(pgm_icon, False, False, 0)
+        pgm_box.pack_start(pgm_text_box, True, True, 0)
+        pgm_box.pack_end(self.prominent_gemini_badge, False, False, 0)
+        self.prominent_gemini_btn.add(pgm_box)
+        self.prominent_gemini_btn.connect("clicked", lambda b: self._launch_gemini(self.search_entry.get_text()))
+        self.prominent_gemini_btn.connect("key-press-event", lambda w, e: self._on_prominent_key_press(w, e, "gemini"))
+        self.no_apps_card.pack_start(self.prominent_gemini_btn, False, False, 0)
+
+        self.root_card.pack_start(self.no_apps_card, True, True, 0)
 
     def _create_app_tile(self, name, icon, app_info, width=108):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
@@ -489,6 +687,9 @@ class PixelAppDrawer(Gtk.Window):
         query = self.search_entry.get_text().strip().lower()
         if not query:
             return True
+        for prefix in ["?", "gemini:", "gemini ", "ai:", "ai "]:
+            if query.startswith(prefix):
+                return False
         tile = child.get_child()
         data = getattr(tile, "item_data", None) or getattr(child, "item_data", None)
         if not data:
@@ -503,30 +704,206 @@ class PixelAppDrawer(Gtk.Window):
     def _on_search_changed(self, entry):
         self._clear_keyboard_selection()
         self.first_visible_app = None
-        query = entry.get_text().strip()
+        raw_text = entry.get_text()
+        query = raw_text.strip()
+
         if query:
             if hasattr(self, "clear_btn"):
                 self.clear_btn.show()
+
+            # Check if user explicitly typed a Gemini prefix
+            is_gemini_prefix = False
+            for prefix in ["?", "gemini:", "gemini ", "ai:", "ai "]:
+                if query.lower().startswith(prefix):
+                    is_gemini_prefix = True
+                    break
+
+            # Find matching apps synchronously
+            matching_apps = []
+            if not is_gemini_prefix:
+                q_lower = query.lower()
+                for item in self.all_items:
+                    if q_lower in item["name"].lower() or q_lower in item["exec"]:
+                        matching_apps.append(item)
+
+            # Update labels for action chips and prominent cards
+            display_query = (query[:32] + "...") if len(query) > 32 else query
+            gemini_query = query
+            if is_gemini_prefix:
+                for prefix in ["?", "gemini:", "gemini ", "ai:", "ai "]:
+                    if gemini_query.lower().startswith(prefix):
+                        gemini_query = gemini_query[len(prefix):].strip()
+                        break
+            disp_gemini = (gemini_query[:32] + "...") if len(gemini_query) > 32 else gemini_query
+
+            self.google_chip_label.set_text(f'Telusuri Google: "{display_query}"')
+            self.gemini_chip_label.set_text(f'Tanya Gemini: "{disp_gemini}"')
+            self.prominent_google_title.set_text(f'Telusuri dengan Google: "{display_query}"')
+            self.prominent_gemini_title.set_text(f'Tanya Gemini AI: "{disp_gemini}"')
+
+            # Adjust badges depending on whether Gemini prefix was used
+            if is_gemini_prefix:
+                self.prominent_gemini_badge.set_text("↵ Enter")
+                self.prominent_google_badge.set_text("Web")
+                self.gemini_chip_badge.set_text("↵ Enter")
+                self.google_chip_badge.set_text("Web")
+            else:
+                self.prominent_google_badge.set_text("↵ Enter")
+                self.prominent_gemini_badge.set_text("AI")
+                self.google_chip_badge.set_text("↵ Enter")
+                self.gemini_chip_badge.set_text("AI")
+
             self.suggested_header.hide()
             self.suggested_box.hide()
+
+            if matching_apps:
+                self.first_visible_app = matching_apps[0]["app_info"]
+                self.all_apps_header.show()
+                self.all_apps_header.set_text(f"APLIKASI COCOK ({len(matching_apps)})")
+                self.scrolled.show()
+                self.no_apps_card.hide()
+                self.action_chips_box.show()
+            else:
+                self.first_visible_app = None
+                self.all_apps_header.hide()
+                self.scrolled.hide()
+                self.action_chips_box.hide()
+                self.no_apps_card.show()
         else:
             if hasattr(self, "clear_btn"):
                 self.clear_btn.hide()
             self.suggested_header.show()
             self.suggested_box.show()
+            self.all_apps_header.show()
+            self.all_apps_header.set_text("SEMUA APLIKASI")
+            self.scrolled.show()
+            self.action_chips_box.hide()
+            self.no_apps_card.hide()
+
         self.flowbox.invalidate_filter()
 
     def _on_search_activate(self, entry):
+        query = entry.get_text().strip()
+        if not query:
+            return
+
+        # Skenario C: Explicit Gemini prefix
+        for prefix in ["?", "gemini:", "gemini ", "ai:", "ai "]:
+            if query.lower().startswith(prefix):
+                self._launch_gemini(query)
+                return
+
+        # Skenario A: Local app match found -> launch first matching app
         if self.first_visible_app:
             self._launch_app(self.first_visible_app)
-        else:
-            cmd = entry.get_text().strip()
-            if cmd:
-                try:
-                    subprocess.Popen(cmd, shell=True)
-                except Exception as e:
-                    print(f"[Drawer] Exec error: {e}")
-                self.hide_drawer()
+            return
+
+        # Skenario B: No local apps found -> Default Enter opens Google Search (Pilihan A)
+        self._launch_google_search(query)
+
+    def _launch_google_search(self, query):
+        self.hide_drawer()
+        clean = query.lstrip("?").strip()
+        if not clean:
+            return
+        url = f"https://www.google.com/search?q={urllib.parse.quote_plus(clean)}"
+        try:
+            subprocess.Popen(["google-chrome", url])
+        except Exception:
+            subprocess.Popen(["xdg-open", url])
+
+    def _launch_gemini(self, query):
+        self.hide_drawer()
+        clean = query
+        for prefix in ["?", "gemini:", "gemini ", "ai:", "ai "]:
+            if clean.lower().startswith(prefix):
+                clean = clean[len(prefix):].strip()
+                break
+        if not clean:
+            clean = query.strip()
+        if not clean:
+            return
+
+        # 1. Copy prompt to system clipboard for instant pasting
+        try:
+            clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+            clipboard.set_text(clean, -1)
+            clipboard.store()
+        except Exception as e:
+            print(f"[Drawer] Clipboard error: {e}")
+
+        # 2. Open Google Gemini in Chrome
+        gemini_url = "https://gemini.google.com/app"
+        try:
+            subprocess.Popen(["google-chrome", gemini_url])
+        except Exception:
+            subprocess.Popen(["xdg-open", gemini_url])
+
+        # 3. Native desktop notification with friendly confirmation
+        try:
+            preview = (clean[:45] + "...") if len(clean) > 45 else clean
+            subprocess.Popen([
+                "notify-send",
+                "-a", "Google Gemini",
+                "-i", "google-chrome",
+                "Membuka Google Gemini",
+                f"Pertanyaan disalin ke clipboard:\n\"{preview}\""
+            ])
+        except Exception:
+            pass
+
+    def _on_prominent_key_press(self, widget, event, target):
+        val = event.keyval
+        if val in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_space):
+            if target == "google":
+                self._launch_google_search(self.search_entry.get_text())
+            else:
+                self._launch_gemini(self.search_entry.get_text())
+            return True
+        elif val == Gdk.KEY_Down or val == Gdk.KEY_Tab:
+            if target == "google":
+                self.prominent_gemini_btn.grab_focus()
+                return True
+        elif val == Gdk.KEY_Up or (val == Gdk.KEY_Tab and (event.state & Gdk.ModifierType.SHIFT_MASK)):
+            if target == "gemini":
+                self.prominent_google_btn.grab_focus()
+                return True
+            elif target == "google":
+                self.search_entry.grab_focus()
+                return True
+        elif val == Gdk.KEY_Escape:
+            self.hide_drawer()
+            return True
+        return False
+
+    def _on_chip_key_press(self, widget, event, target):
+        val = event.keyval
+        if val in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_space):
+            if target == "google":
+                self._launch_google_search(self.search_entry.get_text())
+            else:
+                self._launch_gemini(self.search_entry.get_text())
+            return True
+        elif val == Gdk.KEY_Right:
+            if target == "google":
+                self.gemini_chip.grab_focus()
+                return True
+        elif val == Gdk.KEY_Left:
+            if target == "gemini":
+                self.google_chip.grab_focus()
+                return True
+        elif val == Gdk.KEY_Up:
+            self.search_entry.grab_focus()
+            return True
+        elif val == Gdk.KEY_Down:
+            flow_tiles = self._get_visible_flowbox_tiles()
+            if flow_tiles:
+                self._set_keyboard_selection(flow_tiles[0], "flowbox", 0)
+                return True
+        elif val == Gdk.KEY_Escape:
+            self.hide_drawer()
+            return True
+        return False
 
     def _on_power_clicked(self):
         self.hide_drawer()
@@ -664,16 +1041,23 @@ class PixelAppDrawer(Gtk.Window):
 
     def _on_search_key_press(self, entry, event):
         val = event.keyval
-        if val == Gdk.KEY_Down:
+        if val in (Gdk.KEY_Down, Gdk.KEY_Tab):
+            if self.no_apps_card.is_visible():
+                self.prominent_google_btn.grab_focus()
+                return True
+            if self.action_chips_box.is_visible() and not self.suggested_box.is_visible():
+                self.google_chip.grab_focus()
+                return True
             sug_tiles = self._get_suggested_tiles()
             if self.suggested_box.is_visible() and sug_tiles:
                 idx = min(self.nav_suggested_idx, len(sug_tiles) - 1)
                 self._set_keyboard_selection(sug_tiles[idx], "suggested", idx)
+                return True
             else:
                 flow_tiles = self._get_visible_flowbox_tiles()
                 if flow_tiles:
                     self._set_keyboard_selection(flow_tiles[0], "flowbox", 0)
-            return True
+                    return True
         elif val == Gdk.KEY_Escape:
             self.hide_drawer()
             return True
@@ -850,6 +1234,13 @@ def start_ipc_server(drawer):
                     GLib.idle_add(drawer.hide_drawer)
                 elif data == "search":
                     GLib.idle_add(drawer.show_drawer, True)
+                elif data.startswith("query:"):
+                    q = data[6:]
+                    def do_set_query(query_text=q):
+                        drawer.show_drawer(True)
+                        drawer.search_entry.set_text(query_text)
+                        drawer.search_entry.set_position(-1)
+                    GLib.idle_add(do_set_query)
                 elif data == "nav_down":
                     def do_nav():
                         sug_tiles = drawer._get_suggested_tiles()
@@ -889,7 +1280,7 @@ def main():
     if len(sys.argv) > 1:
         cmd = sys.argv[1].lower()
 
-    if send_ipc_command(cmd):
+    if cmd != "daemon" and send_ipc_command(cmd):
         sys.exit(0)
 
     app = PixelAppDrawer()
