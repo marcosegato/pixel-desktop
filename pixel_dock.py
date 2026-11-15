@@ -43,10 +43,10 @@ except Exception:
 
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
-DOCK_H = 60
+DOCK_H = 64
 GAP = 14
-WINDOW_H = DOCK_H + GAP             # 74
-SHOWN_Y = SCREEN_HEIGHT - WINDOW_H  # 1006
+WINDOW_H = DOCK_H + GAP             # 78
+SHOWN_Y = SCREEN_HEIGHT - WINDOW_H  # 1002
 HIDDEN_Y = SCREEN_HEIGHT + 15       # 1095 (completely offscreen below screen bottom)
 LAUNCHER_CONFIG_FILE = os.path.expanduser("~/.config/pixel-launcher-apps.json")
 
@@ -102,6 +102,13 @@ class PixelDock(Gtk.Window):
         self.hover_candidate = None  # "drawer", "recent", "search", or index 0..N
         self.hover_title = ""
 
+        # Drag and Drop Reordering State
+        self.drag_index = None
+        self.drag_start_x = 0
+        self.drag_start_y = 0
+        self.drag_current_x = 0
+        self.is_dragging = False
+
         # Window-Dodge Obscuration Detection
         self.is_obscured = False
         self.x_display = None
@@ -134,10 +141,11 @@ class PixelDock(Gtk.Window):
         self.connect("leave-notify-event", self.on_leave)
         self.connect("motion-notify-event", self.on_motion)
         self.connect("button-press-event", self.on_button_press)
+        self.connect("button-release-event", self.on_button_release)
         self.connect("realize", self.on_realize)
 
         # Polling timers
-        GLib.timeout_add(1000, self._periodic_check)
+        GLib.timeout_add(300, self._periodic_check)
         GLib.timeout_add(40, self._global_pointer_check)
 
     def on_realize(self, widget):
@@ -300,7 +308,7 @@ class PixelDock(Gtk.Window):
         self._recalculate_geometry()
 
     def _recalculate_geometry(self):
-        self.dock_w = 309 + (len(self.all_dock_items) * 52) + 24
+        self.dock_w = 309 + (len(self.all_dock_items) * 52) + 36
         self.dock_x = (SCREEN_WIDTH - self.dock_w) // 2
         self._update_input_shape()
 
@@ -342,7 +350,7 @@ class PixelDock(Gtk.Window):
                 is_over_dock = (self.dock_x <= px <= self.dock_x + self.dock_w and py >= SHOWN_Y)
                 if not is_over_dock and self.is_obscured:
                     if not self.hide_timer:
-                        self.hide_timer = GLib.timeout_add(380, self._on_hide_timer)
+                        self.hide_timer = GLib.timeout_add(220, self._on_hide_timer)
                 elif is_over_dock:
                     if self.hide_timer:
                         GLib.source_remove(self.hide_timer)
@@ -352,30 +360,67 @@ class PixelDock(Gtk.Window):
         return True
 
     def check_obscuration(self):
-        if not self.x_display or not self.atom_net_active:
+        if not self.x_display:
             return False
         try:
             root = self.x_display.screen().root
-            prop = root.get_full_property(self.atom_net_active, X.AnyPropertyType)
+
+            # Current workspace check
+            atom_current_desktop = self.x_display.intern_atom('_NET_CURRENT_DESKTOP')
+            curr_desk_prop = root.get_full_property(atom_current_desktop, X.AnyPropertyType)
+            curr_desk = curr_desk_prop.value[0] if (curr_desk_prop and curr_desk_prop.value) else 0
+
+            atom_wm_desktop = self.x_display.intern_atom('_NET_WM_DESKTOP')
+            atom_client_list = self.x_display.intern_atom('_NET_CLIENT_LIST')
+            atom_hidden = self.x_display.intern_atom('_NET_WM_STATE_HIDDEN')
+
+            prop = root.get_full_property(atom_client_list, X.AnyPropertyType)
             if not prop or not prop.value:
                 return False
-            active_xid = prop.value[0]
-            if not active_xid:
-                return False
 
-            win = self.x_display.create_resource_object('window', active_xid)
-            state_prop = win.get_full_property(self.atom_net_state, X.AnyPropertyType)
-            if state_prop and state_prop.value:
-                states = state_prop.value
-                if self.atom_fullscreen in states:
-                    return True
-                if self.atom_max_vert in states and self.atom_max_horz in states:
-                    return True
+            for xid in prop.value:
+                try:
+                    win = self.x_display.create_resource_object('window', xid)
 
-            geom = win.get_geometry()
-            if geom.y + geom.height >= SHOWN_Y - 10:
-                if not (geom.x + geom.width < self.dock_x or geom.x > self.dock_x + self.dock_w):
-                    return True
+                    # 1. Desktop check
+                    desk_prop = win.get_full_property(atom_wm_desktop, X.AnyPropertyType)
+                    if desk_prop and desk_prop.value:
+                        desk = desk_prop.value[0]
+                        if desk != 0xFFFFFFFF and desk != curr_desk:
+                            continue
+
+                    # 2. Skip minimized windows
+                    state_prop = win.get_full_property(self.atom_net_state, X.AnyPropertyType)
+                    states = list(state_prop.value) if (state_prop and state_prop.value) else []
+                    if atom_hidden in states:
+                        continue
+
+                    # 3. Skip dock and desktop widgets
+                    cls_prop = win.get_full_property(self.atom_wm_class, X.AnyPropertyType)
+                    if cls_prop and cls_prop.value:
+                        cls_str = cls_prop.value.decode('utf-8', errors='ignore').lower()
+                        if any(k in cls_str for k in ['pixel_dock', 'pixel_desktop', 'desktop-lyrics', 'pixel_app_drawer']):
+                            continue
+
+                    # 4. If window is Fullscreen or Maximized -> Obscured!
+                    if self.atom_fullscreen in states:
+                        return True
+                    if self.atom_max_vert in states and self.atom_max_horz in states:
+                        return True
+
+                    # 5. Overlap check with dock rectangle
+                    coords = root.translate_coords(win, 0, 0)
+                    geom = win.get_geometry()
+                    win_root_x = coords.x
+                    win_root_y = coords.y
+                    win_w = geom.width
+                    win_h = geom.height
+
+                    if win_root_y + win_h >= SHOWN_Y - 5:
+                        if not (win_root_x + win_w < self.dock_x or win_root_x > self.dock_x + self.dock_w):
+                            return True
+                except Exception:
+                    pass
 
             return False
         except Exception:
@@ -520,7 +565,14 @@ class PixelDock(Gtk.Window):
         obscured = self.check_obscuration()
         if obscured != self.is_obscured:
             self.is_obscured = obscured
-            if not self.mouse_inside:
+            display_dev = Gdk.Display.get_default()
+            seat = display_dev.get_default_seat() if display_dev else None
+            pointer = seat.get_pointer() if seat else None
+            is_over = False
+            if pointer:
+                _, px, py = pointer.get_position()
+                is_over = (self.dock_x <= px <= self.dock_x + self.dock_w and py >= SHOWN_Y)
+            if not is_over:
                 if self.is_obscured:
                     self.hide_dock(animated=True)
                 else:
@@ -607,18 +659,48 @@ class PixelDock(Gtk.Window):
         if self.is_obscured:
             if self.hide_timer:
                 GLib.source_remove(self.hide_timer)
-            self.hide_timer = GLib.timeout_add(380, self._on_hide_timer)
+            self.hide_timer = GLib.timeout_add(220, self._on_hide_timer)
         return False
 
     def _on_hide_timer(self):
         self.hide_timer = None
-        if not self.mouse_inside and self.is_obscured:
+        display_dev = Gdk.Display.get_default()
+        seat = display_dev.get_default_seat() if display_dev else None
+        pointer = seat.get_pointer() if seat else None
+        if pointer:
+            _, px, py = pointer.get_position()
+            if self.dock_x <= px <= self.dock_x + self.dock_w and py >= SHOWN_Y:
+                return False
+        if self.is_obscured:
             self.hide_dock(animated=True)
         return False
 
     def on_motion(self, widget, event):
         x = event.x
         y = event.y
+
+        # Handle Drag-and-Drop Reordering
+        if self.drag_index is not None and (event.state & Gdk.ModifierType.BUTTON1_MASK):
+            if not self.is_dragging:
+                if abs(x - self.drag_start_x) > 6:
+                    self.is_dragging = True
+            if self.is_dragging:
+                self.drag_current_x = x
+                num_pinned = len(self.launcher_apps)
+                if num_pinned > 1 and self.drag_index < num_pinned:
+                    start_x = self.dock_x + 309
+                    target_idx = int((x - start_x + 26) // 52)
+                    target_idx = max(0, min(num_pinned - 1, target_idx))
+                    if target_idx != self.drag_index:
+                        item = self.launcher_apps.pop(self.drag_index)
+                        self.launcher_apps.insert(target_idx, item)
+                        self.drag_index = target_idx
+                        self._combine_dock_items()
+                self.queue_draw()
+                win = self.get_window()
+                if win:
+                    win.set_cursor(Gdk.Cursor.new_from_name(self.get_display(), "grabbing"))
+                return True
 
         old_cand = self.hover_candidate
         self.hover_candidate = None
@@ -678,7 +760,11 @@ class PixelDock(Gtk.Window):
                     if 0 <= idx < len(self.all_dock_items):
                         offset = (rx - 309) % 52
                         if offset <= 44:
-                            self.on_app_left_click(self.all_dock_items[idx])
+                            self.drag_index = idx
+                            self.drag_start_x = x
+                            self.drag_start_y = y
+                            self.drag_current_x = x
+                            self.is_dragging = False
                     return True
 
             elif event.button == 3:
@@ -695,6 +781,43 @@ class PixelDock(Gtk.Window):
                     return True
 
         return False
+
+    def on_button_release(self, widget, event):
+        if event.button == 1:
+            if self.is_dragging:
+                self._save_launcher_apps()
+                self.is_dragging = False
+                self.drag_index = None
+                self.queue_draw()
+                win = self.get_window()
+                if win:
+                    win.set_cursor(None)
+                return True
+            elif self.drag_index is not None:
+                idx = self.drag_index
+                self.drag_index = None
+                if 0 <= idx < len(self.all_dock_items):
+                    self.on_app_left_click(self.all_dock_items[idx])
+                return True
+        self.is_dragging = False
+        self.drag_index = None
+        return False
+
+    def _save_launcher_apps(self):
+        to_save = []
+        for app in self.launcher_apps:
+            to_save.append({
+                "name": app.get("name", "App"),
+                "icon": app.get("icon", ""),
+                "cmd": app.get("cmd", ""),
+                "bg": app.get("bg", "#FFFFFF"),
+                "shape": app.get("shape", "circle")
+            })
+        try:
+            with open(LAUNCHER_CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(to_save, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[PixelDock] Error saving reordered apps: {e}")
 
     # ------------------------------------------------------------------
     # App Activation / Unminimize Engine (Single-Click Focus)
@@ -1119,7 +1242,7 @@ class PixelDock(Gtk.Window):
         # 3. Drawer Button (⸬)
         is_hover_drawer = (self.hover_candidate == "drawer")
         cr.save()
-        self._rounded_rect(cr, x + 12, y + 10, 40, 40, 20)
+        self._rounded_rect(cr, x + 12, y + 12, 40, 40, 20)
         if is_hover_drawer:
             cr.set_source_rgba(*btn_hover_rgba)
             cr.fill_preserve()
@@ -1132,7 +1255,7 @@ class PixelDock(Gtk.Window):
 
         # Draw ⸬ icon dots
         cr.set_source_rgb(*text_color)
-        cx, cy = x + 32, y + 30
+        cx, cy = x + 32, y + 32
         dot_r = 2.4
         offset = 5.5
         for dx, dy in [(0, -offset), (0, offset), (-offset, 0), (offset, 0), (0, 0)]:
@@ -1144,7 +1267,7 @@ class PixelDock(Gtk.Window):
         # 4. Recent Apps Button (▢)
         is_hover_recent = (self.hover_candidate == "recent")
         cr.save()
-        self._rounded_rect(cr, x + 60, y + 10, 40, 40, 20)
+        self._rounded_rect(cr, x + 60, y + 12, 40, 40, 20)
         if is_hover_recent:
             cr.set_source_rgba(*btn_hover_rgba)
             cr.fill_preserve()
@@ -1157,7 +1280,7 @@ class PixelDock(Gtk.Window):
 
         # Draw square icon
         cr.set_source_rgb(*text_color)
-        self._rounded_rect(cr, x + 73, y + 23, 14, 14, 3)
+        self._rounded_rect(cr, x + 73, y + 25, 14, 14, 3)
         cr.set_line_width(1.8)
         cr.stroke()
         cr.restore()
@@ -1166,7 +1289,7 @@ class PixelDock(Gtk.Window):
         is_hover_search = (self.hover_candidate == "search")
         cr.save()
         pill_x = x + 110
-        pill_y = y + 10
+        pill_y = y + 12
         pill_w = 185
         pill_h = 40
         self._rounded_rect(cr, pill_x, pill_y, pill_w, pill_h, 20)
@@ -1208,19 +1331,25 @@ class PixelDock(Gtk.Window):
         start_x = x + 309
         for idx, app in enumerate(self.all_dock_items):
             ax = start_x + (idx * 52)
-            ay = y + 8
+            ay = y + 7
             is_hover = (self.hover_candidate == idx)
+            is_being_dragged = (self.is_dragging and idx == self.drag_index)
+            draw_ay = ay - 3 if is_being_dragged else ay
 
             # Badge Circle
             cr.save()
             cr.new_sub_path()
             bg_col = app.get("bg", "#FFFFFF")
             rgb = hex_to_rgb(bg_col)
-            cr.arc(ax + 22, ay + 22, 21, 0, 2 * math.pi)
+            cr.arc(ax + 22, draw_ay + 21, 21, 0, 2 * math.pi)
             cr.set_source_rgb(*rgb)
             cr.fill_preserve()
 
-            if is_hover:
+            if is_being_dragged:
+                cr.set_source_rgba(*dot_color)
+                cr.set_line_width(2.6)
+                cr.stroke()
+            elif is_hover:
                 cr.set_source_rgba(*dot_color)
                 cr.set_line_width(2.0)
                 cr.stroke()
@@ -1235,7 +1364,7 @@ class PixelDock(Gtk.Window):
             pixbuf = self._get_cached_icon(icon_name, 28)
             if pixbuf:
                 cr.save()
-                Gdk.cairo_set_source_pixbuf(cr, pixbuf, ax + 8, ay + 8)
+                Gdk.cairo_set_source_pixbuf(cr, pixbuf, ax + 8, draw_ay + 7)
                 cr.paint()
                 cr.restore()
 
@@ -1244,7 +1373,7 @@ class PixelDock(Gtk.Window):
                 cr.save()
                 cr.new_sub_path()
                 cr.set_source_rgb(*dot_color)
-                cr.arc(ax + 22, ay + 48, 2.5, 0, 2 * math.pi)
+                cr.arc(ax + 22, ay + 47, 2.2, 0, 2 * math.pi)
                 cr.fill()
                 cr.restore()
 
