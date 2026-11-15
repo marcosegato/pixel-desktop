@@ -1,0 +1,16 @@
+[Unit]
+Description=Google Pixel App Drawer / Material Design 3 (Android 15-17 UI)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/Applications/pixel-desktop/pixel_app_drawer.py daemon
+Restart=always
+RestartSec=2
+KillMode=process
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%h/.Xauthority
+
+[Install]
+WantedBy=graphical-session.target

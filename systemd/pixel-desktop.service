@@ -1,0 +1,17 @@
+[Unit]
+Description=Google Pixel Desktop UI / Material Design 3 (Widgets & Canvas)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/Applications/pixel-desktop/pixel_desktop.py
+Restart=always
+RestartSec=2
+KillSignal=SIGTERM
+TimeoutStopSec=3
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%h/.Xauthority
+
+[Install]
+WantedBy=graphical-session.target

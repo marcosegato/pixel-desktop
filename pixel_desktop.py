@@ -22,6 +22,7 @@ import math
 import time
 import json
 import shlex
+import shutil
 import signal
 import calendar
 import datetime
@@ -373,12 +374,15 @@ class MaterialYouDesktop(Gtk.Window):
             self.fixed.put(self.search_entry, sx + 32, self.dock_y + 12)
 
     def load_launcher_apps(self):
+        home = os.path.expanduser("~")
+        wh_launch = os.path.join(home, "Applications/whatsapp-pwa/launch.sh")
+        ytm_launch = os.path.join(home, "Applications/youtube-music/launch.sh")
         default_apps = [
             {"name": "Chrome", "icon": "🌐", "cmd": "google-chrome", "bg": "#D7F0FA"},
-            {"name": "WhatsMulti", "icon": "💬", "cmd": "whatsmulti", "bg": "#FFD6DC"},
-            {"name": "Files", "icon": "📁", "cmd": "nemo /home/teddy", "bg": "#EDE9FE"},
+            {"name": "WhatsApp", "icon": "💬", "cmd": wh_launch if os.path.exists(wh_launch) else "google-chrome https://web.whatsapp.com", "bg": "#FFD6DC"},
+            {"name": "Files", "icon": "📁", "cmd": f"nemo {home}", "bg": "#EDE9FE"},
             {"name": "Terminal", "icon": "💻", "cmd": "gnome-terminal", "bg": "#E0F2FE"},
-            {"name": "YouTube Music", "icon": "🎵", "cmd": "/home/teddy/Applications/youtube-music/launch.sh", "bg": "#D8F1FA"},
+            {"name": "YouTube Music", "icon": "🎵", "cmd": ytm_launch if os.path.exists(ytm_launch) else "google-chrome https://music.youtube.com", "bg": "#D8F1FA"},
             {"name": "Telegram", "icon": "✈️", "cmd": "flatpak run org.telegram.desktop", "bg": "#E0F2FE"},
             {"name": "Settings", "icon": "⚙️", "cmd": "cinnamon-settings", "bg": "#EDE9FE"},
             {"name": "Notes", "icon": "📝", "cmd": f"xed {NOTES_FILE}", "bg": "#FFD6DC"}
@@ -792,7 +796,11 @@ class MaterialYouDesktop(Gtk.Window):
     def fetch_weather_async(self):
         def worker():
             try:
-                cmd = ["/usr/bin/python3", "/home/teddy/.local/share/cinnamon/desklets/weather-widget@teddy/fetch_weather.py"]
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                weather_script = os.path.join(script_dir, "fetch_weather.py")
+                if not os.path.exists(weather_script):
+                    weather_script = os.path.expanduser("~/.local/share/cinnamon/desklets/weather-widget@teddy/fetch_weather.py")
+                cmd = [sys.executable, weather_script]
                 res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                 if res.returncode == 0:
                     data = json.loads(res.stdout)
@@ -801,7 +809,12 @@ class MaterialYouDesktop(Gtk.Window):
                         code = data.get("code", 3)
                         mapping = {0: "Sunny", 1: "Mainly Clear", 2: "Partly Cloudy", 3: "Overcast", 61: "Rainy"}
                         self.weather_cond = mapping.get(code, "Partly Cloudy")
+                        if "sunrise" in data:
+                            self.sunrise_time = data.get("sunrise", "05:00")
+                        if "sunset" in data:
+                            self.sunset_time = data.get("sunset", "17:27")
                         GLib.idle_add(self.queue_draw_area, self.weather_bat_x, self.weather_bat_y, 260, 95)
+                        GLib.idle_add(self.queue_draw_area, self.calendar_x, self.calendar_y, CALENDAR_W, CALENDAR_H)
             except Exception:
                 pass
         threading.Thread(target=worker, daemon=True).start()
@@ -810,16 +823,18 @@ class MaterialYouDesktop(Gtk.Window):
     def update_sun_times(self):
         def worker():
             try:
-                cmd = ["/usr/bin/python3", "/home/teddy/Applications/prayer-applet/helper.py"]
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-                if res.returncode == 0:
-                    data = json.loads(res.stdout)
-                    for p in data.get("all_prayers", []):
-                        if p.get("name") == "Terbit":
-                            self.sunrise_time = p.get("time", "05:00")
-                        elif p.get("name") == "Maghrib":
-                            self.sunset_time = p.get("time", "17:27")
-                    GLib.idle_add(self.queue_draw_area, self.calendar_x, self.calendar_y, CALENDAR_W, CALENDAR_H)
+                prayer_helper = os.path.expanduser("~/Applications/prayer-applet/helper.py")
+                if os.path.exists(prayer_helper):
+                    cmd = [sys.executable, prayer_helper]
+                    res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                    if res.returncode == 0:
+                        data = json.loads(res.stdout)
+                        for p in data.get("all_prayers", []):
+                            if p.get("name") == "Terbit":
+                                self.sunrise_time = p.get("time", "05:00")
+                            elif p.get("name") == "Maghrib":
+                                self.sunset_time = p.get("time", "17:27")
+                        GLib.idle_add(self.queue_draw_area, self.calendar_x, self.calendar_y, CALENDAR_W, CALENDAR_H)
             except Exception:
                 pass
         threading.Thread(target=worker, daemon=True).start()
@@ -912,7 +927,8 @@ class MaterialYouDesktop(Gtk.Window):
             s.sendall(b"toggle\n")
             s.close()
         except Exception:
-            subprocess.Popen(["/home/teddy/Applications/pixel-desktop/pixel_app_drawer.py", "toggle"])
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            subprocess.Popen([sys.executable, os.path.join(script_dir, "pixel_app_drawer.py"), "toggle"])
 
     def toggle_recent_apps(self):
         try:
@@ -923,7 +939,8 @@ class MaterialYouDesktop(Gtk.Window):
             s.sendall(b"toggle\n")
             s.close()
         except Exception:
-            subprocess.Popen(["/home/teddy/Applications/pixel-desktop/pixel_recent_apps.py", "toggle"])
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            subprocess.Popen([sys.executable, os.path.join(script_dir, "pixel_recent_apps.py"), "toggle"])
 
     def draw_rounded_card(self, cr, x, y, w, h, radius):
         cr.new_sub_path()
@@ -2041,10 +2058,17 @@ class MaterialYouDesktop(Gtk.Window):
         return False
 
     def launch_or_focus_whatsapp(self):
-        try:
-            subprocess.Popen(["/home/teddy/Applications/whatsapp-pwa/launch.sh"], start_new_session=True)
-        except Exception as e:
-            print(f"[MaterialYou] WhatsApp launch error: {e}")
+        wh_launch = os.path.expanduser("~/Applications/whatsapp-pwa/launch.sh")
+        if os.path.exists(wh_launch):
+            try:
+                subprocess.Popen([wh_launch], start_new_session=True)
+            except Exception as e:
+                print(f"[MaterialYou] WhatsApp launch error: {e}")
+        else:
+            try:
+                subprocess.Popen(["google-chrome", "https://web.whatsapp.com"], start_new_session=True)
+            except Exception as e:
+                print(f"[MaterialYou] WhatsApp web launch error: {e}")
 
     def mpris_call(self, method_name):
         if not self.media_player_bus:
@@ -2076,12 +2100,27 @@ class MaterialYouDesktop(Gtk.Window):
                 print(f"[MaterialYou] MPRIS {method_name} error: {e}")
 
     def toggle_dark_mode(self):
+        theme_cmd = shutil.which("theme") or os.path.expanduser("~/.local/bin/theme")
+        if os.path.exists(theme_cmd) or shutil.which("theme"):
+            try:
+                subprocess.Popen([theme_cmd, "toggle", "-n"])
+                self.is_dark_mode = not self.is_dark_mode
+                self.queue_draw()
+                return
+            except Exception as e:
+                print(f"[MaterialYou] Dark mode toggle error: {e}")
+        # Fallback Cinnamon interface toggle
         try:
-            subprocess.Popen(["/home/teddy/.local/bin/theme", "toggle", "-n"])
+            s = Gio.Settings.new("org.cinnamon.desktop.interface")
+            cur = s.get_string("gtk-theme")
+            if "Dark" in cur:
+                s.set_string("gtk-theme", cur.replace("Dark", "Light").replace("-dark", "-light"))
+            else:
+                s.set_string("gtk-theme", cur.replace("Light", "Dark").replace("-light", "-dark"))
             self.is_dark_mode = not self.is_dark_mode
             self.queue_draw()
-        except Exception as e:
-            print(f"[MaterialYou] Dark mode toggle error: {e}")
+        except Exception:
+            pass
 
     def activate_search(self):
         try:
@@ -2092,7 +2131,8 @@ class MaterialYouDesktop(Gtk.Window):
             s.sendall(b"search\n")
             s.close()
         except Exception:
-            subprocess.Popen(["/home/teddy/Applications/pixel-desktop/pixel_app_drawer.py", "search"])
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            subprocess.Popen([sys.executable, os.path.join(script_dir, "pixel_app_drawer.py"), "search"])
 
     def deactivate_search(self):
         self.search_active = False

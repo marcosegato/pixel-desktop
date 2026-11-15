@@ -1,0 +1,15 @@
+[Unit]
+Description=Google Pixel Recent Apps Switcher / Material Design 3 (Android 15-17 UI)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/Applications/pixel-desktop/pixel_recent_apps.py daemon
+Restart=always
+RestartSec=2
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%h/.Xauthority
+
+[Install]
+WantedBy=graphical-session.target

@@ -282,15 +282,22 @@ class PixelDock(Gtk.Window):
                 print(f"[PixelDock] Error loading launcher apps: {e}")
 
         if not raw:
+            home = os.path.expanduser("~")
+            wh_launch = os.path.join(home, "Applications/whatsapp-pwa/launch.sh")
+            wh_icon = os.path.join(home, "Applications/whatsapp-pwa/icons/whatsapp.svg")
+            ytm_launch = os.path.join(home, "Applications/youtube-music/launch.sh")
+            ytm_icon = os.path.join(home, "Applications/youtube-music/youtube-music.svg")
+            notes_path = os.path.join(home, ".config/quick-notes.txt")
+
             raw = [
-                {"name": "WhatsApp", "icon": "/home/teddy/Applications/whatsapp-pwa/icons/whatsapp.svg", "cmd": "/home/teddy/Applications/whatsapp-pwa/launch.sh", "bg": "#E8F5E9"},
+                {"name": "WhatsApp", "icon": wh_icon if os.path.exists(wh_icon) else "whatsapp", "cmd": wh_launch if os.path.exists(wh_launch) else "google-chrome https://web.whatsapp.com", "bg": "#E8F5E9"},
                 {"name": "Chrome", "icon": "google-chrome", "cmd": "google-chrome", "bg": "#FFFFFF"},
-                {"name": "Files", "icon": "system-file-manager", "cmd": "nemo /home/teddy", "bg": "#E8EAED"},
+                {"name": "Files", "icon": "system-file-manager", "cmd": f"nemo {home}", "bg": "#E8EAED"},
                 {"name": "Settings", "icon": "preferences-system", "cmd": "cinnamon-settings", "bg": "#E8EAED"},
-                {"name": "YouTube Music", "icon": "/home/teddy/Applications/youtube-music/youtube-music.svg", "cmd": "/home/teddy/Applications/youtube-music/launch.sh", "bg": "#FFFFFF"},
+                {"name": "YouTube Music", "icon": ytm_icon if os.path.exists(ytm_icon) else "multimedia-audio-player", "cmd": ytm_launch if os.path.exists(ytm_launch) else "google-chrome https://music.youtube.com", "bg": "#FFFFFF"},
                 {"name": "Telegram", "icon": "org.telegram.desktop", "cmd": "flatpak run org.telegram.desktop", "bg": "#E1F5FE"},
                 {"name": "Terminal", "icon": "utilities-terminal", "cmd": "gnome-terminal", "bg": "#ECEFF1"},
-                {"name": "Notes", "icon": "accessories-text-editor", "cmd": "xed /home/teddy/.config/quick-notes.txt", "bg": "#FEF7E0"}
+                {"name": "Notes", "icon": "accessories-text-editor", "cmd": f"xed {notes_path}", "bg": "#FEF7E0"}
             ]
 
         # Add pinned flag and running_xids container
@@ -902,11 +909,19 @@ class PixelDock(Gtk.Window):
         name = app.get("name", "")
 
         if "whatsapp" in name.lower() or "whatsapp" in cmd.lower():
-            try:
-                subprocess.Popen(["/home/teddy/Applications/whatsapp-pwa/launch.sh"], start_new_session=True)
-            except Exception as e:
-                print(f"[PixelDock] WhatsApp launch error: {e}")
-            return
+            wh_launch = os.path.expanduser("~/Applications/whatsapp-pwa/launch.sh")
+            if os.path.exists(wh_launch):
+                try:
+                    subprocess.Popen([wh_launch], start_new_session=True)
+                except Exception as e:
+                    print(f"[PixelDock] WhatsApp launch error: {e}")
+                return
+            elif cmd:
+                try:
+                    subprocess.Popen(shlex.split(cmd), start_new_session=True)
+                except Exception:
+                    pass
+                return
 
         if not cmd:
             return
@@ -963,22 +978,23 @@ class PixelDock(Gtk.Window):
         running_xids = app.get("running_xids", [])
 
         # 1. Custom Actions / Profiles
-        if "whatsapp" in name.lower() or "whatsapp" in cmd.lower():
+        wh_base = os.path.expanduser("~/Applications/whatsapp-pwa")
+        if ("whatsapp" in name.lower() or "whatsapp" in cmd.lower()) and os.path.exists(os.path.join(wh_base, "launch-kantor.sh")):
             # WhatsApp 3-Profile Menu
             item_k = Gtk.MenuItem(label="🟢  WhatsApp - Kantor")
-            item_k.connect("activate", lambda w: subprocess.Popen(["/home/teddy/Applications/whatsapp-pwa/launch-kantor.sh"], start_new_session=True))
+            item_k.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, "launch-kantor.sh")], start_new_session=True))
             menu.append(item_k)
 
             item_a = Gtk.MenuItem(label="🟠  WhatsApp - AdminTeknik")
-            item_a.connect("activate", lambda w: subprocess.Popen(["/home/teddy/Applications/whatsapp-pwa/launch-adminteknik.sh"], start_new_session=True))
+            item_a.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, "launch-adminteknik.sh")], start_new_session=True))
             menu.append(item_a)
 
             item_p = Gtk.MenuItem(label="🟣  WhatsApp - Pribadi")
-            item_p.connect("activate", lambda w: subprocess.Popen(["/home/teddy/Applications/whatsapp-pwa/launch-pribadi.sh"], start_new_session=True))
+            item_p.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, "launch-pribadi.sh")], start_new_session=True))
             menu.append(item_p)
 
             item_all = Gtk.MenuItem(label="🚀  Buka Semua 3 Profil Sekaligus")
-            item_all.connect("activate", lambda w: subprocess.Popen(["/home/teddy/Applications/whatsapp-pwa/launch-all.sh"], start_new_session=True))
+            item_all.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, "launch-all.sh")], start_new_session=True))
             menu.append(item_all)
 
         elif "youtube" in name.lower() or "music" in name.lower():
@@ -1164,7 +1180,8 @@ class PixelDock(Gtk.Window):
             s.sendall(b"toggle\n")
             s.close()
         except Exception:
-            subprocess.Popen(["/home/teddy/Applications/pixel-desktop/pixel_app_drawer.py", "toggle"], start_new_session=True)
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            subprocess.Popen([sys.executable, os.path.join(script_dir, "pixel_app_drawer.py"), "toggle"], start_new_session=True)
 
     def toggle_recent_apps(self):
         try:
@@ -1175,7 +1192,8 @@ class PixelDock(Gtk.Window):
             s.sendall(b"toggle\n")
             s.close()
         except Exception:
-            subprocess.Popen(["/home/teddy/Applications/pixel-desktop/pixel_recent_apps.py", "toggle"], start_new_session=True)
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            subprocess.Popen([sys.executable, os.path.join(script_dir, "pixel_recent_apps.py"), "toggle"], start_new_session=True)
 
     def activate_search(self):
         try:
@@ -1186,7 +1204,8 @@ class PixelDock(Gtk.Window):
             s.sendall(b"search\n")
             s.close()
         except Exception:
-            subprocess.Popen(["/home/teddy/Applications/pixel-desktop/pixel_app_drawer.py", "search"], start_new_session=True)
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            subprocess.Popen([sys.executable, os.path.join(script_dir, "pixel_app_drawer.py"), "search"], start_new_session=True)
 
     # ------------------------------------------------------------------
     # Cairo Drawing Engine
