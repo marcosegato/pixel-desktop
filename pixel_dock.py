@@ -890,11 +890,12 @@ class PixelDock(Gtk.Window):
             except Exception:
                 pass
             self.x_display.sync()
-
-            # 6. wmctrl fallback
-            subprocess.run(["wmctrl", "-i", "-a", hex(target_xid)], capture_output=True)
         except Exception as e:
-            print(f"[PixelDock] focus error: {e}")
+            # 6. Fallback if direct X11 message failed
+            try:
+                subprocess.run(["wmctrl", "-i", "-a", hex(target_xid)], capture_output=True)
+            except Exception:
+                pass
 
     def launch_app(self, app):
         cmd = app.get("cmd", "")

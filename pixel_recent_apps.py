@@ -126,8 +126,15 @@ class PixelRecentApps(Gtk.Window):
         if visual and screen.is_composited():
             self.set_visual(visual)
 
-        self.screen_w = screen.get_width()
-        self.screen_h = screen.get_height()
+        disp = Gdk.Display.get_default()
+        monitor = disp.get_primary_monitor() or (disp.get_monitor(0) if disp and disp.get_n_monitors() > 0 else None)
+        if monitor:
+            geom = monitor.get_geometry()
+            self.screen_w = geom.width
+            self.screen_h = geom.height
+        else:
+            self.screen_w = screen.get_width()
+            self.screen_h = screen.get_height()
         self.set_default_size(self.screen_w, self.screen_h)
 
         self.wnck_screen = Wnck.Screen.get_default()
@@ -144,6 +151,7 @@ class PixelRecentApps(Gtk.Window):
         self.hovered_close_idx = -1
         self.hovered_card_idx = -1
         self.hovered_clear_all = False
+        self.alt_held = False
 
         self.drag_active = False
         self.drag_start_x = 0
@@ -151,6 +159,7 @@ class PixelRecentApps(Gtk.Window):
 
         self.connect("draw", self._on_draw)
         self.connect("key-press-event", self._on_key_press)
+        self.connect("key-release-event", self._on_key_release)
         self.connect("button-press-event", self._on_button_press)
         self.connect("button-release-event", self._on_button_release)
         self.connect("motion-notify-event", self._on_motion_notify)
@@ -161,7 +170,8 @@ class PixelRecentApps(Gtk.Window):
                         Gdk.EventMask.BUTTON_PRESS_MASK |
                         Gdk.EventMask.BUTTON_RELEASE_MASK |
                         Gdk.EventMask.SCROLL_MASK |
-                        Gdk.EventMask.KEY_PRESS_MASK)
+                        Gdk.EventMask.KEY_PRESS_MASK |
+                        Gdk.EventMask.KEY_RELEASE_MASK)
 
     def refresh_windows(self):
         self.wnck_screen.force_update()
@@ -216,28 +226,50 @@ class PixelRecentApps(Gtk.Window):
         self.queue_draw()
         return True
 
-    def show_switcher(self):
+    def show_switcher(self, from_alt_tab=False, reverse=False):
         self.refresh_windows()
+        if not self.windows:
+            self.current_idx = 0
+        elif reverse:
+            self.current_idx = len(self.windows) - 1
+        elif len(self.windows) > 1 and from_alt_tab:
+            self.current_idx = 1
+        else:
+            self.current_idx = 0
+
+        self.target_scroll_x = - (self.current_idx * CARD_STRIDE)
+        self.scroll_x = self.target_scroll_x
+        self.alt_held = from_alt_tab
         self.show_all()
         self.present()
         self.grab_focus()
+        if self.get_window():
+            try:
+                self.get_window().focus(GdkX11.x11_get_server_time(self.get_window()))
+            except Exception:
+                pass
+        self.queue_draw()
 
     def hide_switcher(self):
         self.hide()
+        self.alt_held = False
         self.windows = []
         if self.anim_timer_id != 0:
             GLib.source_remove(self.anim_timer_id)
             self.anim_timer_id = 0
 
     def toggle_switcher(self):
+        km = Gdk.Keymap.get_for_display(Gdk.Display.get_default())
+        mod = km.get_modifier_state() if km else 0
+        is_alt = bool(mod & (Gdk.ModifierType.MOD1_MASK | Gdk.ModifierType.SUPER_MASK | Gdk.ModifierType.MOD4_MASK))
         if self.is_visible():
-            if self.windows and len(self.windows) > 1:
+            if is_alt and self.windows and len(self.windows) > 1:
                 self.current_idx = (self.current_idx + 1) % len(self.windows)
                 self._update_target_scroll()
             else:
                 self.hide_switcher()
         else:
-            self.show_switcher()
+            self.show_switcher(from_alt_tab=is_alt)
 
     def activate_window(self, idx):
         if 0 <= idx < len(self.windows):
@@ -246,10 +278,20 @@ class PixelRecentApps(Gtk.Window):
             GLib.timeout_add(20, lambda: self._do_activate(item))
 
     def _do_activate(self, item):
+        activated = False
         try:
-            item.wnck_win.activate(int(time.time()))
+            cur_time = int(time.time())
+            if item.wnck_win.is_minimized():
+                item.wnck_win.unminimize(cur_time)
+            item.wnck_win.activate(cur_time)
+            activated = True
         except Exception:
-            subprocess.run(["wmctrl", "-i", "-a", hex(item.xid)])
+            pass
+        if not activated:
+            try:
+                subprocess.run(["wmctrl", "-i", "-a", hex(item.xid)], timeout=0.5)
+            except Exception:
+                pass
         return False
 
     def close_window(self, idx):
@@ -679,6 +721,7 @@ class PixelRecentApps(Gtk.Window):
         keyval = event.keyval
 
         if keyval == Gdk.KEY_Escape:
+            self.alt_held = False
             self.hide_switcher()
             return True
         elif keyval in (Gdk.KEY_Left, Gdk.KEY_Up):
@@ -691,8 +734,8 @@ class PixelRecentApps(Gtk.Window):
                 self.current_idx = (self.current_idx + 1) % len(self.windows)
                 self._update_target_scroll()
             return True
-        elif keyval == Gdk.KEY_Tab:
-            if event.state & Gdk.ModifierType.SHIFT_MASK:
+        elif keyval in (Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab):
+            if event.state & Gdk.ModifierType.SHIFT_MASK or keyval == Gdk.KEY_ISO_Left_Tab:
                 if self.windows:
                     self.current_idx = (self.current_idx - 1) % len(self.windows)
                     self._update_target_scroll()
@@ -702,6 +745,7 @@ class PixelRecentApps(Gtk.Window):
                     self._update_target_scroll()
             return True
         elif keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter, Gdk.KEY_space):
+            self.alt_held = False
             self.activate_window(self.current_idx)
             return True
         elif keyval in (Gdk.KEY_Delete, Gdk.KEY_BackSpace):
@@ -718,6 +762,19 @@ class PixelRecentApps(Gtk.Window):
                 self._update_target_scroll()
             return True
 
+        return False
+
+    def _on_key_release(self, widget, event):
+        keyval = event.keyval
+        if keyval in (Gdk.KEY_Alt_L, Gdk.KEY_Alt_R, Gdk.KEY_Meta_L, Gdk.KEY_Meta_R,
+                      Gdk.KEY_Super_L, Gdk.KEY_Super_R):
+            if self.alt_held:
+                self.alt_held = False
+                if self.windows and 0 <= self.current_idx < len(self.windows):
+                    self.activate_window(self.current_idx)
+                else:
+                    self.hide_switcher()
+                return True
         return False
 
     def _on_scroll(self, widget, event):
@@ -786,6 +843,7 @@ class PixelRecentApps(Gtk.Window):
         return False
 
     def _on_button_press(self, widget, event):
+        self.alt_held = False
         if event.button != 1:
             return False
 
@@ -878,10 +936,28 @@ def start_ipc_server(app):
             try:
                 conn, _ = server.accept()
                 data = conn.recv(1024).decode('utf-8').strip()
-                if data == "toggle":
+                if data == "alt-tab":
+                    def do_alt_tab():
+                        if app.is_visible():
+                            if app.windows and len(app.windows) > 1:
+                                app.current_idx = (app.current_idx + 1) % len(app.windows)
+                                app._update_target_scroll()
+                        else:
+                            app.show_switcher(from_alt_tab=True)
+                    GLib.idle_add(do_alt_tab)
+                elif data in ("alt-shift-tab", "prev"):
+                    def do_alt_shift_tab():
+                        if app.is_visible():
+                            if app.windows and len(app.windows) > 1:
+                                app.current_idx = (app.current_idx - 1) % len(app.windows)
+                                app._update_target_scroll()
+                        else:
+                            app.show_switcher(from_alt_tab=True, reverse=True)
+                    GLib.idle_add(do_alt_shift_tab)
+                elif data == "toggle":
                     GLib.idle_add(app.toggle_switcher)
                 elif data == "show":
-                    GLib.idle_add(app.show_switcher)
+                    GLib.idle_add(lambda: app.show_switcher(from_alt_tab=False))
                 elif data == "hide":
                     GLib.idle_add(app.hide_switcher)
                 elif data == "next":
@@ -925,14 +1001,17 @@ def main():
     if len(sys.argv) > 1:
         cmd = sys.argv[1].lower()
 
-    if send_ipc_command(cmd):
-        sys.exit(0)
+    if cmd != "daemon":
+        if send_ipc_command(cmd):
+            sys.exit(0)
 
     app = PixelRecentApps()
     start_ipc_server(app)
 
-    if cmd in ("toggle", "show"):
-        GLib.idle_add(app.show_switcher)
+    if cmd == "alt-tab":
+        GLib.idle_add(lambda: app.show_switcher(from_alt_tab=True))
+    elif cmd in ("toggle", "show"):
+        GLib.idle_add(lambda: app.show_switcher(from_alt_tab=False))
 
     Gtk.main()
 
