@@ -358,8 +358,8 @@ class MaterialYouDesktop(Gtk.Window):
         region.union(cairo.RectangleInt(self.pills_x, self.pills_y, DATE_NOTES_W, 110))
         # 8. Control Center Card
         region.union(cairo.RectangleInt(self.control_x, self.control_y, CONTROL_W, CONTROL_H))
-        # 9. Bottom Floating Dock (dynamic width)
-        region.union(cairo.RectangleInt(self.dock_x, self.dock_y, self.dock_w, DOCK_H))
+        # 9. Bottom Floating Dock (delegated to pixel_dock.py)
+        # region.union(cairo.RectangleInt(self.dock_x, self.dock_y, self.dock_w, DOCK_H))
 
         window.input_shape_combine_region(region, 0, 0)
 
@@ -985,8 +985,8 @@ class MaterialYouDesktop(Gtk.Window):
         # 8. Control Center Card (Bottom Right)
         self.draw_control_center(cr)
 
-        # 9. Dynamic Floating Dock
-        self.draw_bottom_dock(cr)
+        # 9. Dynamic Floating Dock (delegated to pixel_dock.py)
+        # self.draw_bottom_dock(cr)
 
         return False
 

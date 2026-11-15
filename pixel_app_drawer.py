@@ -14,6 +14,8 @@ import cairo
 import json
 import time
 import urllib.parse
+import math
+import shlex
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -127,22 +129,54 @@ class PixelAppDrawer(Gtk.Window):
 
     def _on_draw(self, widget, cr):
         is_dark = self._is_dark_mode()
-        # Draw translucent scrim backdrop over full screen
-        cr.set_operator(cairo.Operator.SOURCE)
-        if is_dark:
-            cr.set_source_rgba(0, 0, 0, 0.32)
-        else:
-            cr.set_source_rgba(0, 0, 0, 0.14)
+        # 1. Clear window
+        cr.save()
+        cr.set_operator(cairo.Operator.CLEAR)
         cr.paint()
+        cr.restore()
+
+        # 2. Paint translucent scrim backdrop over full screen
+        cr.save()
+        if is_dark:
+            cr.set_source_rgba(0, 0, 0, 0.45)
+        else:
+            cr.set_source_rgba(0, 0, 0, 0.22)
+        cr.paint()
+        cr.restore()
+
+        # 3. Paint root_card surface 100% OPAQUE (zero wallpaper bleed)
+        coords = self.root_card.translate_coordinates(self, 0, 0)
+        if coords:
+            cx, cy = coords
+            alloc = self.root_card.get_allocation()
+            cw, ch = alloc.width, alloc.height
+            if cw > 50 and ch > 50:
+                cr.save()
+                cr.set_operator(cairo.Operator.SOURCE)
+                if is_dark:
+                    cr.set_source_rgb(0.118, 0.102, 0.094) # #1E1A18
+                else:
+                    cr.set_source_rgb(1.0, 1.0, 1.0) # #FFFFFF
+
+                r = 28
+                cr.new_sub_path()
+                cr.arc(cx + cw - r, cy + r, r, -math.pi/2, 0)
+                cr.arc(cx + cw - r, cy + ch - r, r, 0, math.pi/2)
+                cr.arc(cx + r, cy + ch - r, r, math.pi/2, math.pi)
+                cr.arc(cx + r, cy + r, r, math.pi, 3*math.pi/2)
+                cr.close_path()
+                cr.fill()
+                cr.restore()
+
         return False
 
     def _load_css(self):
         is_dark = self._is_dark_mode()
-        bg_color = "rgba(30, 26, 24, 0.96)" if is_dark else "rgba(255, 248, 246, 0.97)"
+        bg_color = "#1E1A18" if is_dark else "#FFFFFF"
         card_bg = "rgba(255, 255, 255, 0.08)" if is_dark else "rgba(0, 0, 0, 0.04)"
-        text_primary = "#EDE0DC" if is_dark else "#231917"
-        text_secondary = "#D0C3BE" if is_dark else "#53433F"
-        border_color = "rgba(255, 255, 255, 0.10)" if is_dark else "rgba(0, 0, 0, 0.08)"
+        text_primary = "#EDE0DC" if is_dark else "#181311"
+        text_secondary = "#D0C3BE" if is_dark else "#4B3F3C"
+        border_color = "rgba(255, 255, 255, 0.12)" if is_dark else "rgba(0, 0, 0, 0.10)"
         accent_peach = "#E0876A" if is_dark else "#8F4C38"
         hover_bg = "rgba(224, 135, 106, 0.18)" if is_dark else "rgba(143, 76, 56, 0.12)"
         hover_border = "rgba(224, 135, 106, 0.35)" if is_dark else "rgba(143, 76, 56, 0.25)"
@@ -292,18 +326,20 @@ class PixelAppDrawer(Gtk.Window):
         .suggested-box {{
             margin: 4px 20px 12px 20px;
         }}
-        .app-item {{
+        button.app-item, .app-item {{
             background: transparent;
+            background-color: transparent;
             border-radius: 18px;
             border: 1px solid transparent;
-            padding: 8px 6px;
+            padding: 6px 4px;
+            box-shadow: none;
             transition: all 120ms ease-out;
         }}
-        .app-item:hover, .app-item:focus {{
+        button.app-item:hover, button.app-item:focus, .app-item:hover, .app-item:focus {{
             background-color: {hover_bg};
             border: 1px solid {hover_border};
         }}
-        .app-item.keyboard-selected {{
+        button.app-item.keyboard-selected, .app-item.keyboard-selected {{
             background-color: {hover_bg};
             border: 1px solid {accent_peach};
         }}
@@ -498,6 +534,7 @@ class PixelAppDrawer(Gtk.Window):
         self.flowbox.set_column_spacing(10)
         self.flowbox.set_filter_func(self._filter_apps)
         self.flowbox.set_can_focus(False)
+        self.flowbox.connect("child-activated", self._on_flowbox_child_activated)
 
         flow_pad_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         flow_pad_box.set_halign(Gtk.Align.CENTER)
@@ -589,7 +626,7 @@ class PixelAppDrawer(Gtk.Window):
 
     def _create_app_tile(self, name, icon, app_info, width=108):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        box.set_size_request(width, 82)
+        box.set_size_request(width, 88)
         box.get_style_context().add_class("app-item")
 
         img = None
@@ -614,21 +651,23 @@ class PixelAppDrawer(Gtk.Window):
         lbl.get_style_context().add_class("app-label")
         lbl.set_line_wrap(True)
         lbl.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        lbl.set_lines(2)
-        lbl.set_max_width_chars(14)
+        lbl.set_lines(3)
+        lbl.set_max_width_chars(16)
         lbl.set_ellipsize(Pango.EllipsizeMode.END)
         lbl.set_justify(Gtk.Justification.CENTER)
         lbl.set_halign(Gtk.Align.CENTER)
         box.pack_start(lbl, False, False, 0)
 
-        event_box = Gtk.EventBox()
-        event_box.set_visible_window(False)
-        event_box.set_can_focus(False)
-        event_box.add(box)
-        event_box.app_box = box
-        event_box.app_info = app_info
-        event_box.connect("button-press-event", lambda w, e: self._launch_app(app_info))
-        return event_box
+        btn = Gtk.Button()
+        btn.get_style_context().add_class("app-item")
+        btn.set_relief(Gtk.ReliefStyle.NONE)
+        btn.set_can_focus(True)
+        btn.set_tooltip_text(name)
+        btn.add(box)
+        btn.app_box = box
+        btn.app_info = app_info
+        btn.connect("clicked", lambda b, info=app_info: self._launch_app(info))
+        return btn
 
     def _load_apps(self):
         apps = Gio.AppInfo.get_all()
@@ -934,8 +973,20 @@ class PixelAppDrawer(Gtk.Window):
         self.hide_drawer()
         subprocess.Popen(["cinnamon-session-quit", "--power-off"])
 
+    def _on_flowbox_child_activated(self, flowbox, child):
+        tile = child.get_child()
+        app_info = getattr(tile, "app_info", None)
+        if not app_info and hasattr(child, "item_data"):
+            app_info = child.item_data.get("app_info")
+        if app_info:
+            self._launch_app(app_info)
+
     def _launch_app(self, app_info):
         self.hide_drawer()
+        try:
+            record_app_usage(app_info.get_id())
+        except Exception:
+            pass
         try:
             context = Gdk.Display.get_default().get_app_launch_context()
             app_info.launch([], context)
@@ -943,7 +994,7 @@ class PixelAppDrawer(Gtk.Window):
             cmd = app_info.get_commandline()
             print(f"[Drawer] Standard launch failed ({e}), falling back to cmd: {cmd}")
             if cmd:
-                subprocess.Popen(cmd.split()[0])
+                subprocess.Popen(shlex.split(cmd), start_new_session=True)
 
     def _position_window(self):
         display = Gdk.Display.get_default()
@@ -957,35 +1008,22 @@ class PixelAppDrawer(Gtk.Window):
         if gdk_win:
             gdk_win.move_resize(geom.x, geom.y, geom.width, geom.height)
 
-        dock_y = 995
-        try:
-            pos_file = os.path.expanduser("~/.config/pixel-widgets-pos.json")
-            if os.path.exists(pos_file):
-                with open(pos_file, "r") as f:
-                    pos_data = json.load(f)
-                    if "dock" in pos_data and pos_data["dock"][1] is not None:
-                        dock_y = pos_data["dock"][1]
-        except Exception:
-            pass
-
-        gap = 16
-        bottom_margin = max(24, geom.height - dock_y + gap)
-        if (geom.height - bottom_margin - DRAWER_HEIGHT) < 40:
-            bottom_margin = (geom.height - DRAWER_HEIGHT) // 2
-
-        self.root_card.set_margin_bottom(bottom_margin)
+        # Anchor drawer card 12px directly above the bottom dock (dock top is 1006)
+        self.root_card.set_margin_bottom(86)
 
     def _force_focus_and_raise(self):
         try:
             gdk_win = self.get_window()
             if not gdk_win:
-                return
+                return False
             xid = gdk_win.get_xid()
             from Xlib import X, display, protocol
             d = display.Display()
+            d.set_error_handler(lambda *args: None)
             root = d.screen().root
             win = d.create_resource_object('window', xid)
 
+            win.configure(stack_mode=X.Above)
             atom_net_active = d.intern_atom('_NET_ACTIVE_WINDOW')
             ev = protocol.event.ClientMessage(
                 window=win,
@@ -993,9 +1031,14 @@ class PixelAppDrawer(Gtk.Window):
                 data=(32, [2, int(time.time() * 1000) & 0xFFFFFFFF, 0, 0, 0])
             )
             root.send_event(ev, event_mask=X.SubstructureRedirectMask | X.SubstructureNotifyMask)
+            try:
+                d.set_input_focus(win, X.RevertToParent, X.CurrentTime)
+            except Exception:
+                pass
             d.sync()
-        except Exception as e:
-            print(f"[Drawer] Force focus error: {e}")
+        except Exception:
+            pass
+        return False
 
     def show_drawer(self, focus_search=True):
         self._clear_keyboard_selection()
@@ -1010,6 +1053,7 @@ class PixelAppDrawer(Gtk.Window):
         self.present()
 
         self._force_focus_and_raise()
+        GLib.timeout_add(35, self._force_focus_and_raise)
 
         if focus_search:
             self.search_entry.grab_focus()
@@ -1040,10 +1084,6 @@ class PixelAppDrawer(Gtk.Window):
         return False
 
     def _on_focus_out(self, widget, event):
-        if (time.time() - getattr(self, "last_shown_time", 0)) < 0.35:
-            return False
-        if self.is_visible() and not self.has_toplevel_focus():
-            self.hide_drawer()
         return False
 
     def _clear_keyboard_selection(self):
