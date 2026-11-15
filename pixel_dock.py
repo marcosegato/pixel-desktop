@@ -6,22 +6,28 @@ ThinkPad X1 Carbon Gen 6 (Enterprise Tier 1)
 Features:
 - Material Design 3 Floating Dock Surface with Monet tonal container elevation
 - Full Plank Replacement: Auto-Hide / Window-Dodge behavior
-- 100% Invisible when hidden: Slides completely offscreen (y = 1090), 0 pixels visible
+- 100% Invisible when hidden: Slides completely offscreen (y = 1095), 0 pixels visible
 - Global Bottom-Edge Hover Reveal: Reveals instantly when cursor hits screen bottom (y >= 1078) even with fullscreen apps
 - Leftmost Pixel App Drawer button (⸬) -> opens full-screen Pixel App Drawer overlay
 - Android Recent Apps button (▢) -> opens Recent Apps multitasking overview
 - Google Pixel Search Pill -> opens App Drawer search
-- Dynamic App Badges (from ~/.config/pixel-launcher-apps.json) with running dot indicators (•)
+- Dynamic App Badges: Pinned apps + Running Unpinned Apps with running dot indicators (•)
+- Single-Click Restore/Unminimize: If an app is running/minimized, left-clicking restores and focuses its window (never opens duplicate windows)
+- Right-Click Material 3 Context Menu:
+  * Application Profiles / Desktop Actions (e.g. WhatsApp Kantor/Admin/Pribadi/All, Chrome New Window/Incognito)
+  * "📌 Simpan di Dock" (Keep in Dock) / "📌 Lepas dari Dock" (Remove from Dock)
+  * "✕ Tutup Jendela" (Close Window)
+- Dynamic Width Expansion/Contraction as apps open and close
 - Smooth 60fps spring/ease animations, 0.0% CPU when stationary
-- X11 multi-window focus switching and application launcher
 """
 
-import sys, os, time, math, json, shlex, subprocess, signal
+import sys, os, time, math, json, shlex, subprocess, signal, glob
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 gi.require_version('GdkPixbuf', '2.0')
 gi.require_version('PangoCairo', '1.0')
+gi.require_version('Gio', '2.0')
 from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, Gio, Pango, PangoCairo
 import cairo
 
@@ -74,18 +80,23 @@ class PixelDock(Gtk.Window):
         self.icon_theme = Gtk.IconTheme.get_default()
         self.icon_cache = {}
 
+        # Pre-index desktop files for dynamic running apps
+        self.desktop_index = {}
+        self._index_desktop_files()
+
         # State Variables
         self.is_dark_mode = self.check_dark_mode()
         self.launcher_apps = []
+        self.unpinned_apps = {}
+        self.all_dock_items = []
         self.load_launcher_apps()
 
         # Geometry
-        self.dock_w = 309 + (len(self.launcher_apps) * 52) + 12
-        self.dock_x = (SCREEN_WIDTH - self.dock_w) // 2
         self.current_y = SHOWN_Y
         self.target_y = SHOWN_Y
         self.anim_timer = None
         self.hide_timer = None
+        self._recalculate_geometry()
 
         self.mouse_inside = False
         self.hover_candidate = None  # "drawer", "recent", "search", or index 0..N
@@ -101,9 +112,10 @@ class PixelDock(Gtk.Window):
         self.atom_max_horz = None
         self.atom_client_list = None
         self.atom_wm_class = None
-        self.running_classes = set()
+        self.atom_close_window = None
 
         self._init_xlib()
+        self._init_menu_css()
 
         self.set_size_request(SCREEN_WIDTH, WINDOW_H)
         self.set_default_size(SCREEN_WIDTH, WINDOW_H)
@@ -142,8 +154,99 @@ class PixelDock(Gtk.Window):
             self.atom_max_horz = self.x_display.intern_atom('_NET_WM_STATE_MAXIMIZED_HORZ')
             self.atom_client_list = self.x_display.intern_atom('_NET_CLIENT_LIST')
             self.atom_wm_class = self.x_display.intern_atom('WM_CLASS')
+            self.atom_close_window = self.x_display.intern_atom('_NET_CLOSE_WINDOW')
         except Exception as e:
             print(f"[PixelDock] Xlib init warning: {e}")
+
+    def _init_menu_css(self):
+        css = """
+        menu {
+            background-color: #FFFFFF;
+            border-radius: 16px;
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            padding: 8px 6px;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+        }
+        menuitem {
+            border-radius: 10px;
+            padding: 7px 14px;
+            color: #111827;
+            font-family: 'Google Sans', 'Roboto', sans-serif;
+            font-size: 12.5px;
+            font-weight: 500;
+        }
+        menuitem:hover {
+            background-color: rgba(224, 135, 106, 0.18);
+            color: #8F4C38;
+        }
+        separator {
+            background-color: rgba(0, 0, 0, 0.08);
+            margin: 5px 8px;
+        }
+        """
+        if self.is_dark_mode:
+            css = """
+            menu {
+                background-color: #1E1A18;
+                border-radius: 16px;
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                padding: 8px 6px;
+                box-shadow: 0 12px 36px rgba(0, 0, 0, 0.50);
+            }
+            menuitem {
+                border-radius: 10px;
+                padding: 7px 14px;
+                color: #EDE0DC;
+                font-family: 'Google Sans', 'Roboto', sans-serif;
+                font-size: 12.5px;
+                font-weight: 500;
+            }
+            menuitem:hover {
+                background-color: rgba(224, 135, 106, 0.22);
+                color: #E0876A;
+            }
+            separator {
+                background-color: rgba(255, 255, 255, 0.10);
+                margin: 5px 8px;
+            }
+            """
+        provider = Gtk.CssProvider()
+        provider.load_from_data(css.encode('utf-8'))
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 30
+        )
+
+    def _index_desktop_files(self):
+        index = {}
+        dirs = [os.path.expanduser('~/.local/share/applications/*.desktop'), '/usr/share/applications/*.desktop']
+        for p in dirs:
+            for f in glob.glob(p):
+                try:
+                    info = Gio.DesktopAppInfo.new_from_filename(f)
+                    if info:
+                        base = os.path.basename(f)
+                        name = info.get_display_name()
+                        icon = info.get_string('Icon') or ''
+                        cmd = info.get_commandline() or ''
+                        wm = (info.get_startup_wm_class() or '').lower()
+                        exec_bin = cmd.split()[0].split('/')[-1].lower() if cmd else ''
+
+                        entry = {
+                            'file': f,
+                            'name': name,
+                            'icon': icon,
+                            'cmd': cmd,
+                            'desktop_id': base,
+                            'info': info
+                        }
+                        if wm:
+                            index[wm] = entry
+                        if exec_bin:
+                            index[exec_bin] = entry
+                        index[base.replace('.desktop', '').lower()] = entry
+                except Exception:
+                    pass
+        self.desktop_index = index
 
     def check_dark_mode(self):
         try:
@@ -162,24 +265,44 @@ class PixelDock(Gtk.Window):
 
     def load_launcher_apps(self):
         self.icon_cache.clear()
+        raw = []
         if os.path.exists(LAUNCHER_CONFIG_FILE):
             try:
                 with open(LAUNCHER_CONFIG_FILE, "r", encoding="utf-8") as f:
-                    self.launcher_apps = json.load(f)
-                    return
+                    raw = json.load(f)
             except Exception as e:
                 print(f"[PixelDock] Error loading launcher apps: {e}")
 
-        self.launcher_apps = [
-            {"name": "WhatsApp", "icon": "/home/teddy/Applications/whatsapp-pwa/icons/whatsapp.svg", "cmd": "/home/teddy/Applications/whatsapp-pwa/launch.sh", "bg": "#E8F5E9"},
-            {"name": "Chrome", "icon": "google-chrome", "cmd": "google-chrome", "bg": "#FFFFFF"},
-            {"name": "Files", "icon": "system-file-manager", "cmd": "nemo /home/teddy", "bg": "#E8EAED"},
-            {"name": "Settings", "icon": "preferences-system", "cmd": "cinnamon-settings", "bg": "#E8EAED"},
-            {"name": "YouTube Music", "icon": "/home/teddy/Applications/youtube-music/youtube-music.svg", "cmd": "/home/teddy/Applications/youtube-music/launch.sh", "bg": "#FFFFFF"},
-            {"name": "Telegram", "icon": "org.telegram.desktop", "cmd": "flatpak run org.telegram.desktop", "bg": "#E1F5FE"},
-            {"name": "Terminal", "icon": "utilities-terminal", "cmd": "gnome-terminal", "bg": "#ECEFF1"},
-            {"name": "Notes", "icon": "accessories-text-editor", "cmd": "xed /home/teddy/.config/quick-notes.txt", "bg": "#FEF7E0"}
-        ]
+        if not raw:
+            raw = [
+                {"name": "WhatsApp", "icon": "/home/teddy/Applications/whatsapp-pwa/icons/whatsapp.svg", "cmd": "/home/teddy/Applications/whatsapp-pwa/launch.sh", "bg": "#E8F5E9"},
+                {"name": "Chrome", "icon": "google-chrome", "cmd": "google-chrome", "bg": "#FFFFFF"},
+                {"name": "Files", "icon": "system-file-manager", "cmd": "nemo /home/teddy", "bg": "#E8EAED"},
+                {"name": "Settings", "icon": "preferences-system", "cmd": "cinnamon-settings", "bg": "#E8EAED"},
+                {"name": "YouTube Music", "icon": "/home/teddy/Applications/youtube-music/youtube-music.svg", "cmd": "/home/teddy/Applications/youtube-music/launch.sh", "bg": "#FFFFFF"},
+                {"name": "Telegram", "icon": "org.telegram.desktop", "cmd": "flatpak run org.telegram.desktop", "bg": "#E1F5FE"},
+                {"name": "Terminal", "icon": "utilities-terminal", "cmd": "gnome-terminal", "bg": "#ECEFF1"},
+                {"name": "Notes", "icon": "accessories-text-editor", "cmd": "xed /home/teddy/.config/quick-notes.txt", "bg": "#FEF7E0"}
+            ]
+
+        # Add pinned flag and running_xids container
+        self.launcher_apps = []
+        for item in raw:
+            item_copy = dict(item)
+            item_copy["pinned"] = True
+            item_copy["running_xids"] = []
+            self.launcher_apps.append(item_copy)
+
+        self._combine_dock_items()
+
+    def _combine_dock_items(self):
+        self.all_dock_items = list(self.launcher_apps) + list(self.unpinned_apps.values())
+        self._recalculate_geometry()
+
+    def _recalculate_geometry(self):
+        self.dock_w = 309 + (len(self.all_dock_items) * 52) + 24
+        self.dock_x = (SCREEN_WIDTH - self.dock_w) // 2
+        self._update_input_shape()
 
     def _update_input_shape(self):
         try:
@@ -261,62 +384,135 @@ class PixelDock(Gtk.Window):
     def update_running_apps(self):
         if not self.x_display or not self.atom_client_list:
             return
+
+        # Clear running XIDs on pinned apps
+        for app in self.launcher_apps:
+            app["running_xids"] = []
+
+        unpinned_map = {}
+        old_unpinned_keys = set(self.unpinned_apps.keys())
+
         try:
             root = self.x_display.screen().root
             prop = root.get_full_property(self.atom_client_list, X.AnyPropertyType)
-            classes = set()
+            atom_type = self.x_display.intern_atom('_NET_WM_WINDOW_TYPE')
+            atom_type_normal = self.x_display.intern_atom('_NET_WM_WINDOW_TYPE_NORMAL')
+            atom_type_dialog = self.x_display.intern_atom('_NET_WM_WINDOW_TYPE_DIALOG')
+            atom_skip_taskbar = self.x_display.intern_atom('_NET_WM_STATE_SKIP_TASKBAR')
+
             if prop and prop.value:
                 for xid in prop.value:
                     try:
                         win = self.x_display.create_resource_object('window', xid)
+
+                        # Check window type
+                        type_prop = win.get_full_property(atom_type, X.AnyPropertyType)
+                        if type_prop and type_prop.value:
+                            types = list(type_prop.value)
+                            if atom_type_normal not in types and atom_type_dialog not in types:
+                                continue
+
+                        # Check state (skip taskbar)
+                        state_prop = win.get_full_property(self.atom_net_state, X.AnyPropertyType)
+                        if state_prop and state_prop.value and atom_skip_taskbar in state_prop.value:
+                            continue
+
+                        # Check class
                         cls_prop = win.get_full_property(self.atom_wm_class, X.AnyPropertyType)
-                        if cls_prop and cls_prop.value:
-                            parts = cls_prop.value.decode('utf-8', errors='ignore').split('\x00')
-                            for p in parts:
-                                if p:
-                                    classes.add(p.lower())
+                        if not cls_prop or not cls_prop.value:
+                            continue
+                        parts = [p.lower() for p in cls_prop.value.decode('utf-8', errors='ignore').split('\x00') if p]
+                        if not parts:
+                            continue
+
+                        # Ignore internal desktop widgets
+                        cls_str = " ".join(parts)
+                        if any(k in cls_str for k in ["pixel_desktop", "pixel_dock", "pixel_app_drawer", "desktop-lyrics"]):
+                            continue
+
+                        # 1. Match against pinned apps
+                        matched_pinned = False
+                        for p_app in self.launcher_apps:
+                            p_name = p_app.get("name", "").lower()
+                            p_cmd = p_app.get("cmd", "").lower()
+                            p_keys = []
+                            if "whatsapp" in p_name or "whatsapp" in p_cmd:
+                                p_keys = ["whatsapp", "whatsapp-kantor", "whatsapp-adminteknik", "whatsapp-pribadi"]
+                            elif "youtube" in p_name or "music" in p_name:
+                                p_keys = ["cinhimbnkkaeohfgghhklpknlkffjgod", "crx_cinhimbnkkaeohfgghhklpknlkffjgod", "youtube-music", "youtube music"]
+                            elif "chrome" in p_name or "chrome" in p_cmd:
+                                if any(p.startswith("crx_") or "cinhimb" in p or "whatsapp" in p for p in parts):
+                                    continue
+                                p_keys = ["google-chrome", "chrome"]
+                            elif "terminal" in p_name or "terminal" in p_cmd:
+                                p_keys = ["gnome-terminal-server", "gnome-terminal", "terminal"]
+                            elif "files" in p_name or "nemo" in p_cmd:
+                                p_keys = ["nemo", "files"]
+                            elif "telegram" in p_name:
+                                p_keys = ["telegram", "telegramdesktop", "org.telegram.desktop"]
+                            elif "settings" in p_name:
+                                p_keys = ["cinnamon-settings"]
+                            elif "notes" in p_name or "xed" in p_cmd:
+                                p_keys = ["xed"]
+                            else:
+                                p_keys = [p_name]
+                                if p_cmd:
+                                    p_keys.append(p_cmd.split()[0].split('/')[-1])
+
+                            if any(k in cls_str for k in p_keys):
+                                p_app["running_xids"].append(xid)
+                                matched_pinned = True
+                                break
+
+                        if matched_pinned:
+                            continue
+
+                        # 2. Window is an unpinned running app: match via desktop index
+                        match_info = None
+                        for p in parts:
+                            if p in self.desktop_index:
+                                match_info = self.desktop_index[p]
+                                break
+
+                        app_id = parts[0]
+                        app_name = match_info['name'] if match_info else parts[-1].capitalize()
+                        app_icon = match_info['icon'] if match_info else parts[0]
+                        app_cmd = match_info['cmd'] if match_info else parts[0]
+
+                        if app_id not in unpinned_map:
+                            unpinned_map[app_id] = {
+                                "name": app_name,
+                                "icon": app_icon,
+                                "cmd": app_cmd,
+                                "bg": "#FFFFFF",
+                                "pinned": False,
+                                "desktop_id": match_info.get("desktop_id") if match_info else None,
+                                "running_xids": [xid]
+                            }
+                        else:
+                            unpinned_map[app_id]["running_xids"].append(xid)
+
                     except Exception:
                         pass
-            self.running_classes = classes
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[PixelDock] update_running_apps error: {e}")
 
-    def is_app_running(self, app):
-        name = app.get("name", "").lower()
-        cmd = app.get("cmd", "").lower()
+        # Check if dock items changed
+        new_unpinned_keys = set(unpinned_map.keys())
+        self.unpinned_apps = unpinned_map
 
-        keys = []
-        if "whatsapp" in name or "whatsapp" in cmd:
-            keys.extend(["whatsapp", "whatsapp-kantor", "whatsapp-adminteknik", "whatsapp-pribadi"])
-        elif "chrome" in name or "chrome" in cmd:
-            keys.extend(["google-chrome", "chrome"])
-        elif "terminal" in name or "terminal" in cmd:
-            keys.extend(["gnome-terminal", "gnome-terminal-server", "terminal"])
-        elif "files" in name or "nemo" in cmd:
-            keys.extend(["nemo", "files"])
-        elif "youtube" in name or "music" in name:
-            keys.extend(["youtube-music", "music"])
-        elif "telegram" in name:
-            keys.extend(["telegram", "telegramdesktop", "org.telegram.desktop"])
-        elif "settings" in name:
-            keys.extend(["cinnamon-settings", "settings"])
-        elif "notes" in name or "xed" in cmd:
-            keys.extend(["xed"])
+        if new_unpinned_keys != old_unpinned_keys:
+            self._combine_dock_items()
+            self.queue_draw()
         else:
-            keys.append(name)
-            if cmd:
-                keys.append(cmd.split()[0].split('/')[-1])
-
-        for k in keys:
-            for c in self.running_classes:
-                if k in c:
-                    return True
-        return False
+            self.all_dock_items = list(self.launcher_apps) + list(self.unpinned_apps.values())
+            self.queue_draw()
 
     def _periodic_check(self):
         cur_dark = self.check_dark_mode()
         if cur_dark != self.is_dark_mode:
             self.is_dark_mode = cur_dark
+            self._init_menu_css()
             self.queue_draw()
 
         self.update_running_apps()
@@ -441,11 +637,11 @@ class PixelDock(Gtk.Window):
                 self.hover_title = "Telusuri Google atau Gemini"
             elif rx >= 309:
                 idx = int((rx - 309) // 52)
-                if 0 <= idx < len(self.launcher_apps):
+                if 0 <= idx < len(self.all_dock_items):
                     offset = (rx - 309) % 52
                     if offset <= 44:
                         self.hover_candidate = idx
-                        self.hover_title = self.launcher_apps[idx].get("name", "")
+                        self.hover_title = self.all_dock_items[idx].get("name", "")
 
         if self.hover_candidate != old_cand:
             self.queue_draw()
@@ -459,31 +655,378 @@ class PixelDock(Gtk.Window):
         return False
 
     def on_button_press(self, widget, event):
-        if event.button != 1:
-            return False
-
         x = event.x
         y = event.y
         rx = x - self.dock_x
 
         if 0 <= y <= DOCK_H and 0 <= rx <= self.dock_w:
-            if 12 <= rx <= 52:
-                self.toggle_app_drawer()
-                return True
-            elif 60 <= rx <= 100:
-                self.toggle_recent_apps()
-                return True
-            elif 110 <= rx <= 295:
-                self.activate_search()
-                return True
-            elif rx >= 309:
-                idx = int((rx - 309) // 52)
-                if 0 <= idx < len(self.launcher_apps):
-                    offset = (rx - 309) % 52
-                    if offset <= 44:
-                        self.launch_or_focus_app(self.launcher_apps[idx])
-                return True
+            # Immediate window state refresh so clicks have 0-latency tracking
+            self.update_running_apps()
+            if event.button == 1:
+                # Left Click
+                if 12 <= rx <= 52:
+                    self.toggle_app_drawer()
+                    return True
+                elif 60 <= rx <= 100:
+                    self.toggle_recent_apps()
+                    return True
+                elif 110 <= rx <= 295:
+                    self.activate_search()
+                    return True
+                elif rx >= 309:
+                    idx = int((rx - 309) // 52)
+                    if 0 <= idx < len(self.all_dock_items):
+                        offset = (rx - 309) % 52
+                        if offset <= 44:
+                            self.on_app_left_click(self.all_dock_items[idx])
+                    return True
+
+            elif event.button == 3:
+                # Right Click Context Menu
+                if rx >= 309:
+                    idx = int((rx - 309) // 52)
+                    if 0 <= idx < len(self.all_dock_items):
+                        offset = (rx - 309) % 52
+                        if offset <= 44:
+                            self.show_context_menu(self.all_dock_items[idx], event)
+                    return True
+                elif 12 <= rx <= 52:
+                    self.toggle_app_drawer()
+                    return True
+
         return False
+
+    # ------------------------------------------------------------------
+    # App Activation / Unminimize Engine (Single-Click Focus)
+    # ------------------------------------------------------------------
+    def on_app_left_click(self, app):
+        running_xids = app.get("running_xids", [])
+        if running_xids:
+            # Window is already running: Restore, unminimize and focus!
+            self.focus_or_unminimize(running_xids)
+        else:
+            # Window is not running: Launch new instance!
+            self.launch_app(app)
+
+    def focus_or_unminimize(self, running_xids):
+        if not self.x_display or not running_xids:
+            return
+        try:
+            root = self.x_display.screen().root
+            prop = root.get_full_property(self.atom_net_active, X.AnyPropertyType)
+            active_xid = prop.value[0] if (prop and prop.value) else 0
+
+            # Cycle windows if multiple instances exist and current is already active
+            target_xid = running_xids[0]
+            if len(running_xids) > 1 and active_xid in running_xids:
+                idx = running_xids.index(active_xid)
+                target_xid = running_xids[(idx + 1) % len(running_xids)]
+
+            win = self.x_display.create_resource_object('window', target_xid)
+            atom_hidden = self.x_display.intern_atom('_NET_WM_STATE_HIDDEN')
+            state_prop = win.get_full_property(self.atom_net_state, X.AnyPropertyType)
+            is_hidden = False
+            if state_prop and state_prop.value:
+                is_hidden = (atom_hidden in state_prop.value)
+
+            # 1. If single window, it is active in foreground AND not hidden: MINIMIZE IT!
+            if len(running_xids) == 1 and active_xid == target_xid and not is_hidden:
+                atom_change_state = self.x_display.intern_atom('WM_CHANGE_STATE')
+                ev = protocol.event.ClientMessage(
+                    window=win,
+                    client_type=atom_change_state,
+                    data=(32, [3, 0, 0, 0, 0])  # IconicState = 3
+                )
+                root.send_event(ev, event_mask=X.SubstructureRedirectMask | X.SubstructureNotifyMask)
+                self.x_display.sync()
+                return
+
+            # 2. Window is minimized or inactive: Unminimize, raise and focus!
+            ev_state = protocol.event.ClientMessage(
+                window=win,
+                client_type=self.atom_net_state,
+                data=(32, [0, atom_hidden, 0, 1, 0])  # 0 = REMOVE
+            )
+            root.send_event(ev_state, event_mask=X.SubstructureRedirectMask | X.SubstructureNotifyMask)
+
+            # 3. Map & raise above
+            win.map()
+            win.configure(stack_mode=X.Above)
+
+            # 4. Send _NET_ACTIVE_WINDOW
+            ev_active = protocol.event.ClientMessage(
+                window=win,
+                client_type=self.atom_net_active,
+                data=(32, [2, int(time.time() * 1000) & 0xFFFFFFFF, 0, 0, 0])
+            )
+            root.send_event(ev_active, event_mask=X.SubstructureRedirectMask | X.SubstructureNotifyMask)
+
+            # 5. Set direct X11 input focus
+            try:
+                self.x_display.set_input_focus(win, X.RevertToParent, X.CurrentTime)
+            except Exception:
+                pass
+            self.x_display.sync()
+
+            # 6. wmctrl fallback
+            subprocess.run(["wmctrl", "-i", "-a", hex(target_xid)], capture_output=True)
+        except Exception as e:
+            print(f"[PixelDock] focus error: {e}")
+
+    def launch_app(self, app):
+        cmd = app.get("cmd", "")
+        name = app.get("name", "")
+
+        if "whatsapp" in name.lower() or "whatsapp" in cmd.lower():
+            try:
+                subprocess.Popen(["/home/teddy/Applications/whatsapp-pwa/launch.sh"], start_new_session=True)
+            except Exception as e:
+                print(f"[PixelDock] WhatsApp launch error: {e}")
+            return
+
+        if not cmd:
+            return
+
+        try:
+            subprocess.Popen(shlex.split(cmd), start_new_session=True)
+        except Exception as e:
+            print(f"[PixelDock] Launch error ({cmd}): {e}")
+
+    def _send_mpris(self, method):
+        # 1. Try D-Bus MPRIS
+        try:
+            import dbus
+            bus = dbus.SessionBus()
+            for name in bus.list_names():
+                if name.startswith("org.mpris.MediaPlayer2."):
+                    try:
+                        obj = bus.get_object(name, '/org/mpris/MediaPlayer2')
+                        player = dbus.Interface(obj, 'org.mpris.MediaPlayer2.Player')
+                        getattr(player, method)()
+                        return True
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # 2. Fallback to hardware multimedia key simulation (ThinkPad keycodes)
+        key_codes = {
+            "PlayPause": 172,  # XF86AudioPlay
+            "Next": 171,       # XF86AudioNext
+            "Previous": 173,   # XF86AudioPrev
+            "Stop": 174        # XF86AudioStop
+        }
+        kc = key_codes.get(method)
+        if kc and self.x_display:
+            try:
+                from Xlib.ext import xtest
+                xtest.fake_input(self.x_display, X.KeyPress, kc)
+                xtest.fake_input(self.x_display, X.KeyRelease, kc)
+                self.x_display.sync()
+                return True
+            except Exception:
+                pass
+        return False
+
+    # ------------------------------------------------------------------
+    # Material 3 Right-Click Context Menu & "Keep in Dock"
+    # ------------------------------------------------------------------
+    def show_context_menu(self, app, event):
+        menu = Gtk.Menu()
+        name = app.get("name", "")
+        cmd = app.get("cmd", "")
+        is_pinned = app.get("pinned", False)
+        running_xids = app.get("running_xids", [])
+
+        # 1. Custom Actions / Profiles
+        if "whatsapp" in name.lower() or "whatsapp" in cmd.lower():
+            # WhatsApp 3-Profile Menu
+            item_k = Gtk.MenuItem(label="🟢  WhatsApp - Kantor")
+            item_k.connect("activate", lambda w: subprocess.Popen(["/home/teddy/Applications/whatsapp-pwa/launch-kantor.sh"], start_new_session=True))
+            menu.append(item_k)
+
+            item_a = Gtk.MenuItem(label="🟠  WhatsApp - AdminTeknik")
+            item_a.connect("activate", lambda w: subprocess.Popen(["/home/teddy/Applications/whatsapp-pwa/launch-adminteknik.sh"], start_new_session=True))
+            menu.append(item_a)
+
+            item_p = Gtk.MenuItem(label="🟣  WhatsApp - Pribadi")
+            item_p.connect("activate", lambda w: subprocess.Popen(["/home/teddy/Applications/whatsapp-pwa/launch-pribadi.sh"], start_new_session=True))
+            menu.append(item_p)
+
+            item_all = Gtk.MenuItem(label="🚀  Buka Semua 3 Profil Sekaligus")
+            item_all.connect("activate", lambda w: subprocess.Popen(["/home/teddy/Applications/whatsapp-pwa/launch-all.sh"], start_new_session=True))
+            menu.append(item_all)
+
+        elif "youtube" in name.lower() or "music" in name.lower():
+            item_play = Gtk.MenuItem(label="⏯️  Putar / Jeda")
+            item_play.connect("activate", lambda w: self._send_mpris("PlayPause"))
+            menu.append(item_play)
+
+            item_next = Gtk.MenuItem(label="⏭️  Lagu Berikutnya")
+            item_next.connect("activate", lambda w: self._send_mpris("Next"))
+            menu.append(item_next)
+
+            item_prev = Gtk.MenuItem(label="⏮️  Lagu Sebelumnya")
+            item_prev.connect("activate", lambda w: self._send_mpris("Previous"))
+            menu.append(item_prev)
+
+            if not running_xids:
+                item_open = Gtk.MenuItem(label="🔴  Buka YouTube Music")
+                item_open.connect("activate", lambda w, a=app: self.launch_app(a))
+                menu.append(item_open)
+
+        elif "chrome" in name.lower() or "chrome" in cmd.lower():
+            item_nw = Gtk.MenuItem(label="🌐  Jendela Baru")
+            item_nw.connect("activate", lambda w: subprocess.Popen(["google-chrome", "--new-window"], start_new_session=True))
+            menu.append(item_nw)
+
+            item_incog = Gtk.MenuItem(label="🕶️  Jendela Penyamaran Baru")
+            item_incog.connect("activate", lambda w: subprocess.Popen(["google-chrome", "--incognito"], start_new_session=True))
+            menu.append(item_incog)
+
+        elif "nemo" in cmd.lower() or "files" in name.lower():
+            item_nw = Gtk.MenuItem(label="📁  Jendela Berkas Baru")
+            item_nw.connect("activate", lambda w: subprocess.Popen(["nemo"], start_new_session=True))
+            menu.append(item_nw)
+
+            item_home = Gtk.MenuItem(label="🏠  Folder Home")
+            item_home.connect("activate", lambda w: subprocess.Popen(["nemo", os.path.expanduser("~")], start_new_session=True))
+            menu.append(item_home)
+
+            item_dl = Gtk.MenuItem(label="📥  Folder Unduhan")
+            item_dl.connect("activate", lambda w: subprocess.Popen(["nemo", os.path.expanduser("~/Downloads")], start_new_session=True))
+            menu.append(item_dl)
+
+        elif "terminal" in name.lower() or "terminal" in cmd.lower():
+            item_t = Gtk.MenuItem(label="💻  Buka Terminal Baru")
+            item_t.connect("activate", lambda w: subprocess.Popen(["gnome-terminal"], start_new_session=True))
+            menu.append(item_t)
+
+        elif "settings" in name.lower():
+            item_s = Gtk.MenuItem(label="⚙️  Pengaturan Sistem")
+            item_s.connect("activate", lambda w: subprocess.Popen(["cinnamon-settings"], start_new_session=True))
+            menu.append(item_s)
+
+        elif "telegram" in name.lower():
+            item_t = Gtk.MenuItem(label="✈️  Buka Telegram")
+            item_t.connect("activate", lambda w, a=app: self.launch_app(a))
+            menu.append(item_t)
+
+        elif "notes" in name.lower() or "xed" in cmd.lower():
+            item_n = Gtk.MenuItem(label="📝  Buka Catatan Cepat")
+            item_n.connect("activate", lambda w: subprocess.Popen(["xed", os.path.expanduser("~/.config/quick-notes.txt")], start_new_session=True))
+            menu.append(item_n)
+
+        else:
+            # Check desktop actions from .desktop file
+            desktop_id = app.get("desktop_id")
+            if not desktop_id:
+                for key in [name.lower(), cmd.split()[0].split('/')[-1].lower() if cmd else '']:
+                    if key in self.desktop_index:
+                        desktop_id = self.desktop_index[key].get('desktop_id')
+                        break
+            if desktop_id:
+                try:
+                    d_info = Gio.DesktopAppInfo.new(desktop_id)
+                    if d_info and d_info.list_actions():
+                        for act in d_info.list_actions():
+                            act_name = d_info.get_action_name(act) or act
+                            act_item = Gtk.MenuItem(label=f"▶  {act_name}")
+                            act_item.connect("activate", lambda w, a=act, info=d_info: info.launch_action(a, None))
+                            menu.append(act_item)
+                except Exception:
+                    pass
+
+        # Separator
+        if len(menu.get_children()) > 0:
+            menu.append(Gtk.SeparatorMenuItem())
+
+        # 2. Pin / Unpin Action ("Keep in Dock")
+        if is_pinned:
+            item_pin = Gtk.MenuItem(label="📌  Lepas dari Dock")
+            item_pin.connect("activate", lambda w, a=app: self.unpin_app(a))
+            menu.append(item_pin)
+        else:
+            item_pin = Gtk.MenuItem(label="📌  Simpan di Dock")
+            item_pin.connect("activate", lambda w, a=app: self.pin_app(a))
+            menu.append(item_pin)
+
+        # 3. Close Window Action (if running)
+        if running_xids:
+            item_close = Gtk.MenuItem(label="✕  Tutup Jendela")
+            item_close.connect("activate", lambda w, xids=running_xids: self.close_app_windows(xids))
+            menu.append(item_close)
+
+        menu.show_all()
+        try:
+            menu.popup_at_pointer(event)
+        except Exception:
+            menu.popup(None, None, None, None, event.button, event.time)
+
+    def pin_app(self, app):
+        apps = []
+        if os.path.exists(LAUNCHER_CONFIG_FILE):
+            try:
+                with open(LAUNCHER_CONFIG_FILE, "r", encoding="utf-8") as f:
+                    apps = json.load(f)
+            except Exception:
+                pass
+
+        exists = any(a.get("name", "").lower() == app.get("name", "").lower() for a in apps)
+        if not exists:
+            new_entry = {
+                "name": app.get("name", "App"),
+                "icon": app.get("icon", "application-x-executable"),
+                "cmd": app.get("cmd", ""),
+                "bg": app.get("bg", "#FFFFFF"),
+                "shape": "circle"
+            }
+            apps.append(new_entry)
+            try:
+                with open(LAUNCHER_CONFIG_FILE, "w", encoding="utf-8") as f:
+                    json.dump(apps, f, indent=2, ensure_ascii=False)
+            except Exception as e:
+                print(f"[PixelDock] Error saving pinned apps: {e}")
+
+        self.load_launcher_apps()
+        self.update_running_apps()
+
+    def unpin_app(self, app):
+        apps = []
+        if os.path.exists(LAUNCHER_CONFIG_FILE):
+            try:
+                with open(LAUNCHER_CONFIG_FILE, "r", encoding="utf-8") as f:
+                    apps = json.load(f)
+            except Exception:
+                pass
+
+        apps = [a for a in apps if a.get("name", "").lower() != app.get("name", "").lower() and a.get("cmd", "").lower() != app.get("cmd", "").lower()]
+        try:
+            with open(LAUNCHER_CONFIG_FILE, "w", encoding="utf-8") as f:
+                json.dump(apps, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[PixelDock] Error saving pinned apps: {e}")
+
+        self.load_launcher_apps()
+        self.update_running_apps()
+
+    def close_app_windows(self, running_xids):
+        if not self.x_display:
+            return
+        root = self.x_display.screen().root
+        for xid in running_xids:
+            try:
+                win = self.x_display.create_resource_object('window', xid)
+                ev = protocol.event.ClientMessage(
+                    window=win,
+                    client_type=self.atom_close_window,
+                    data=(32, [int(time.time() * 1000) & 0xFFFFFFFF, 2, 0, 0, 0])
+                )
+                root.send_event(ev, event_mask=X.SubstructureRedirectMask | X.SubstructureNotifyMask)
+                self.x_display.sync()
+            except Exception:
+                pass
+            subprocess.run(["wmctrl", "-i", "-c", hex(xid)], capture_output=True)
 
     # ------------------------------------------------------------------
     # Actions & App Launching
@@ -520,43 +1063,6 @@ class PixelDock(Gtk.Window):
             s.close()
         except Exception:
             subprocess.Popen(["/home/teddy/Applications/pixel-desktop/pixel_app_drawer.py", "search"], start_new_session=True)
-
-    def launch_or_focus_app(self, app):
-        cmd = app.get("cmd", "")
-        name = app.get("name", "")
-
-        if "whatsapp" in name.lower() or "whatsapp" in cmd.lower():
-            try:
-                subprocess.Popen(["/home/teddy/Applications/whatsapp-pwa/launch.sh"], start_new_session=True)
-            except Exception as e:
-                print(f"[PixelDock] WhatsApp launch error: {e}")
-            return
-
-        if not cmd:
-            return
-
-        parts = shlex.split(cmd)
-        prog = parts[0].split('/')[-1].lower()
-
-        # Try window raise via wmctrl
-        try:
-            out = subprocess.check_output(["wmctrl", "-lx"], text=True)
-            for line in out.strip().splitlines():
-                row = line.split()
-                if len(row) >= 3:
-                    xid = row[0]
-                    wm_class = row[2].lower()
-                    if prog in wm_class or name.lower() in wm_class:
-                        subprocess.run(["wmctrl", "-i", "-a", xid])
-                        return
-        except Exception:
-            pass
-
-        # Launch fresh instance
-        try:
-            subprocess.Popen(parts, start_new_session=True)
-        except Exception as e:
-            print(f"[PixelDock] Launch error ({cmd}): {e}")
 
     # ------------------------------------------------------------------
     # Cairo Drawing Engine
@@ -630,6 +1136,7 @@ class PixelDock(Gtk.Window):
         dot_r = 2.4
         offset = 5.5
         for dx, dy in [(0, -offset), (0, offset), (-offset, 0), (offset, 0), (0, 0)]:
+            cr.new_sub_path()
             cr.arc(cx + dx, cy + dy, dot_r, 0, 2 * math.pi)
             cr.fill()
         cr.restore()
@@ -695,16 +1202,18 @@ class PixelDock(Gtk.Window):
         cr.move_to(pill_x + pill_w - 28, pill_y + 10)
         PangoCairo.show_layout(cr, layout_mic)
         cr.restore()
+        cr.new_path()
 
-        # 6. Pinned Application Badges
+        # 6. Pinned & Running Application Badges
         start_x = x + 309
-        for idx, app in enumerate(self.launcher_apps):
+        for idx, app in enumerate(self.all_dock_items):
             ax = start_x + (idx * 52)
             ay = y + 8
             is_hover = (self.hover_candidate == idx)
 
             # Badge Circle
             cr.save()
+            cr.new_sub_path()
             bg_col = app.get("bg", "#FFFFFF")
             rgb = hex_to_rgb(bg_col)
             cr.arc(ax + 22, ay + 22, 21, 0, 2 * math.pi)
@@ -731,8 +1240,9 @@ class PixelDock(Gtk.Window):
                 cr.restore()
 
             # Running Dot Indicator
-            if self.is_app_running(app):
+            if app.get("running_xids"):
                 cr.save()
+                cr.new_sub_path()
                 cr.set_source_rgb(*dot_color)
                 cr.arc(ax + 22, ay + 48, 2.5, 0, 2 * math.pi)
                 cr.fill()
