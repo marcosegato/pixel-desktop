@@ -23,7 +23,7 @@ from gi.repository import Gtk, Gdk, Gio, GLib, Pango
 
 SOCKET_PATH = "/tmp/pixel_app_drawer.sock"
 DRAWER_WIDTH = 792
-DRAWER_HEIGHT = 540
+DRAWER_HEIGHT = 570
 USAGE_FILE = os.path.expanduser("~/.config/pixel-app-usage.json")
 
 def record_app_usage(app_id):
@@ -73,9 +73,15 @@ class PixelAppDrawer(Gtk.Window):
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
         self.set_keep_above(True)
-        self.set_default_size(DRAWER_WIDTH, DRAWER_HEIGHT)
-        self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
+        self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
+        self.set_modal(True)
+        self.stick()
         self.set_app_paintable(True)
+
+        display = Gdk.Display.get_default()
+        monitor = display.get_primary_monitor() or display.get_monitor(0)
+        geom = monitor.get_geometry()
+        self.set_default_size(geom.width, geom.height)
 
         # Transparency support
         screen = self.get_screen()
@@ -99,6 +105,7 @@ class PixelAppDrawer(Gtk.Window):
         self.connect("draw", self._on_draw)
         self.connect("realize", lambda w: self._position_window())
         self.connect("key-press-event", self._on_key_press)
+        self.connect("button-press-event", self._on_button_press)
         self.connect("focus-out-event", self._on_focus_out)
 
         self._start_super_key_listener()
@@ -119,11 +126,14 @@ class PixelAppDrawer(Gtk.Window):
             return True
 
     def _on_draw(self, widget, cr):
-        # Clear root window to 100% transparent to eliminate rectangular corner artifacts
-        cr.set_source_rgba(0, 0, 0, 0)
-        cr.set_operator(cairo.Operator.CLEAR)
+        is_dark = self._is_dark_mode()
+        # Draw translucent scrim backdrop over full screen
+        cr.set_operator(cairo.Operator.SOURCE)
+        if is_dark:
+            cr.set_source_rgba(0, 0, 0, 0.32)
+        else:
+            cr.set_source_rgba(0, 0, 0, 0.14)
         cr.paint()
-        cr.set_operator(cairo.Operator.OVER)
         return False
 
     def _load_css(self):
@@ -155,7 +165,7 @@ class PixelAppDrawer(Gtk.Window):
             background-color: {bg_color};
             border-radius: 28px;
             border: 1.5px solid {border_color};
-            box-shadow: none;
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.40);
         }}
         .search-container {{
             background-color: {card_bg};
@@ -311,8 +321,7 @@ class PixelAppDrawer(Gtk.Window):
         .drawer-card flowboxchild,
         .drawer-card eventbox {{
             border: none;
-            background: transparent;
-            background-color: transparent;
+            background-color: {bg_color};
             box-shadow: none;
             outline: none;
             outline-style: none;
@@ -353,9 +362,21 @@ class PixelAppDrawer(Gtk.Window):
         self._css_provider.load_from_data(css.encode('utf-8'))
 
     def _build_ui(self):
+        self.backdrop_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.backdrop_box.set_hexpand(True)
+        self.backdrop_box.set_vexpand(True)
+        self.add(self.backdrop_box)
+
+        self.backdrop_spacer = Gtk.Box()
+        self.backdrop_spacer.set_vexpand(True)
+        self.backdrop_box.pack_start(self.backdrop_spacer, True, True, 0)
+
         self.root_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.root_card.get_style_context().add_class("drawer-card")
-        self.add(self.root_card)
+        self.root_card.set_size_request(DRAWER_WIDTH, DRAWER_HEIGHT)
+        self.root_card.set_halign(Gtk.Align.CENTER)
+        self.root_card.set_valign(Gtk.Align.END)
+        self.backdrop_box.pack_end(self.root_card, False, False, 0)
 
         # 1. Search Bar Container (Material 3 Pill)
         self.search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -567,8 +588,8 @@ class PixelAppDrawer(Gtk.Window):
         self.no_apps_card.hide()
 
     def _create_app_tile(self, name, icon, app_info, width=108):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        box.set_size_request(width, 72)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        box.set_size_request(width, 82)
         box.get_style_context().add_class("app-item")
 
         img = None
@@ -587,12 +608,15 @@ class PixelAppDrawer(Gtk.Window):
             img.set_pixel_size(38)
 
         img.set_halign(Gtk.Align.CENTER)
-        box.pack_start(img, False, False, 2)
+        box.pack_start(img, False, False, 1)
 
         lbl = Gtk.Label(label=name)
         lbl.get_style_context().add_class("app-label")
+        lbl.set_line_wrap(True)
+        lbl.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        lbl.set_lines(2)
+        lbl.set_max_width_chars(14)
         lbl.set_ellipsize(Pango.EllipsizeMode.END)
-        lbl.set_max_width_chars(11)
         lbl.set_justify(Gtk.Justification.CENTER)
         lbl.set_halign(Gtk.Align.CENTER)
         box.pack_start(lbl, False, False, 0)
@@ -642,8 +666,7 @@ class PixelAppDrawer(Gtk.Window):
             tile.item_data = item
             self.flowbox.add(tile)
 
-        self.show_all()
-        self.hide()
+        self.root_card.show_all()
 
     def _populate_suggested_apps(self):
         # Clear existing suggested tiles
@@ -669,7 +692,7 @@ class PixelAppDrawer(Gtk.Window):
 
         # Fallback to smart defaults if fewer than 6 apps tracked
         if len(suggested_found) < 6:
-            default_keys = ["whatsmulti", "whatsapp", "chrome", "google-chrome", "nemo", "files", "youtube", "music", "drive", "terminal", "telegram"]
+            default_keys = ["whatsapp", "chrome", "google-chrome", "nemo", "files", "youtube", "music", "drive", "terminal", "telegram"]
             for dk in default_keys:
                 for item in self.all_items:
                     if (dk in item["name"].lower() or dk in item["exec"]) and item not in suggested_found:
@@ -927,6 +950,13 @@ class PixelAppDrawer(Gtk.Window):
         monitor = display.get_primary_monitor() or display.get_monitor(0)
         geom = monitor.get_geometry()
 
+        self.set_default_size(geom.width, geom.height)
+        self.resize(geom.width, geom.height)
+        self.move(geom.x, geom.y)
+        gdk_win = self.get_window()
+        if gdk_win:
+            gdk_win.move_resize(geom.x, geom.y, geom.width, geom.height)
+
         dock_y = 995
         try:
             pos_file = os.path.expanduser("~/.config/pixel-widgets-pos.json")
@@ -938,43 +968,60 @@ class PixelAppDrawer(Gtk.Window):
         except Exception:
             pass
 
-        min_s, nat_s = self.get_preferred_size()
-        actual_w = max(DRAWER_WIDTH, nat_s.width)
-        actual_h = max(DRAWER_HEIGHT, nat_s.height)
-
         gap = 16
-        x = geom.x + (geom.width - actual_w) // 2
-        y = geom.y + dock_y - actual_h - gap
-        self.move(x, y)
-        gdk_win = self.get_window()
-        if gdk_win:
-            gdk_win.move(x, y)
+        bottom_margin = max(24, geom.height - dock_y + gap)
+        if (geom.height - bottom_margin - DRAWER_HEIGHT) < 40:
+            bottom_margin = (geom.height - DRAWER_HEIGHT) // 2
+
+        self.root_card.set_margin_bottom(bottom_margin)
+
+    def _force_focus_and_raise(self):
+        try:
+            gdk_win = self.get_window()
+            if not gdk_win:
+                return
+            xid = gdk_win.get_xid()
+            from Xlib import X, display, protocol
+            d = display.Display()
+            root = d.screen().root
+            win = d.create_resource_object('window', xid)
+
+            atom_net_active = d.intern_atom('_NET_ACTIVE_WINDOW')
+            ev = protocol.event.ClientMessage(
+                window=win,
+                client_type=atom_net_active,
+                data=(32, [2, int(time.time() * 1000) & 0xFFFFFFFF, 0, 0, 0])
+            )
+            root.send_event(ev, event_mask=X.SubstructureRedirectMask | X.SubstructureNotifyMask)
+            d.sync()
+        except Exception as e:
+            print(f"[Drawer] Force focus error: {e}")
 
     def show_drawer(self, focus_search=True):
         self._clear_keyboard_selection()
         self._load_css()
         self._populate_suggested_apps()
+        self.search_entry.set_text("")
+        self._position_window()
         self.show_all()
         if hasattr(self, "clear_btn") and not self.search_entry.get_text().strip():
             self.clear_btn.hide()
-        self._position_window()
         self.set_keep_above(True)
         self.present()
-        self.search_entry.set_text("")
+
+        self._force_focus_and_raise()
+
         if focus_search:
             self.search_entry.grab_focus()
         self.last_shown_time = time.time()
-        self._can_close_on_unfocus = False
-        GLib.timeout_add(800, self._enable_unfocus_close)
 
     def hide_drawer(self):
         self.hide()
-        self._can_close_on_unfocus = False
 
     def toggle_drawer(self):
         now = time.time()
-        # Debounce rapid double-trigger calls (< 400ms)
-        if (now - getattr(self, "last_toggle_time", 0)) < 0.40:
+        # Debounce rapid double-trigger calls (< 250ms)
+        if (now - getattr(self, "last_toggle_time", 0)) < 0.25:
             return
         self.last_toggle_time = now
 
@@ -983,14 +1030,19 @@ class PixelAppDrawer(Gtk.Window):
         else:
             self.show_drawer()
 
-    def _enable_unfocus_close(self):
-        self._can_close_on_unfocus = True
+    def _on_button_press(self, widget, event):
+        alloc = self.root_card.get_allocation()
+        in_card = (alloc.x <= event.x <= alloc.x + alloc.width and 
+                   alloc.y <= event.y <= alloc.y + alloc.height)
+        if not in_card:
+            self.hide_drawer()
+            return True
         return False
 
     def _on_focus_out(self, widget, event):
-        if (time.time() - getattr(self, "last_shown_time", 0)) < 0.8:
+        if (time.time() - getattr(self, "last_shown_time", 0)) < 0.35:
             return False
-        if self._can_close_on_unfocus and self.is_visible():
+        if self.is_visible() and not self.has_toplevel_focus():
             self.hide_drawer()
         return False
 

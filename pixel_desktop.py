@@ -40,6 +40,12 @@ gi.require_version('PangoCairo', '1.0')
 from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, Gio, Rsvg, Pango, PangoCairo
 import cairo
 
+# Prevent zombie child processes from subprocess.Popen
+try:
+    signal.signal(signal.SIGCHLD, signal.SIG_IGN)
+except Exception:
+    pass
+
 # Screen Dimensions
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
@@ -1927,11 +1933,9 @@ class MaterialYouDesktop(Gtk.Window):
                     if 0 <= app_idx < len(self.launcher_apps) and offset_in_slot <= 44:
                         app = self.launcher_apps[app_idx]
                         cmd = app.get("cmd", "")
-                        if "whatsmulti" in cmd.lower():
-                            self.launch_or_focus_whatsmulti()
-                        elif cmd:
+                        if cmd:
                             try:
-                                subprocess.Popen(shlex.split(cmd))
+                                subprocess.Popen(shlex.split(cmd), start_new_session=True)
                             except Exception as e:
                                 print(f"[MaterialYou] App launch error for {cmd}: {e}")
                     return True
@@ -2036,13 +2040,11 @@ class MaterialYouDesktop(Gtk.Window):
 
         return False
 
-    def launch_or_focus_whatsmulti(self):
+    def launch_or_focus_whatsapp(self):
         try:
-            res = subprocess.run(["wmctrl", "-x", "-a", "whatsmulti.whatsmulti"], capture_output=True)
-            if res.returncode != 0:
-                subprocess.Popen(["/home/teddy/Applications/whatsmulti/run.sh"])
+            subprocess.Popen(["/home/teddy/Applications/whatsapp-pwa/launch.sh"], start_new_session=True)
         except Exception as e:
-            print(f"[MaterialYou] WhatsMulti launch error: {e}")
+            print(f"[MaterialYou] WhatsApp launch error: {e}")
 
     def mpris_call(self, method_name):
         if not self.media_player_bus:
@@ -2116,8 +2118,8 @@ class MaterialYouDesktop(Gtk.Window):
             return
 
         apps_map = {
-            "whatsmulti": self.launch_or_focus_whatsmulti,
-            "whatsapp": self.launch_or_focus_whatsmulti,
+            "whatsmulti": self.launch_or_focus_whatsapp,
+            "whatsapp": self.launch_or_focus_whatsapp,
             "terminal": lambda: subprocess.Popen(["gnome-terminal"]),
             "files": lambda: subprocess.Popen(["nemo", os.path.expanduser("~")]),
             "nemo": lambda: subprocess.Popen(["nemo", os.path.expanduser("~")]),
