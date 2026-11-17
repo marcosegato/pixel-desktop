@@ -41,6 +41,8 @@ gi.require_version('PangoCairo', '1.0')
 from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, Gio, Rsvg, Pango, PangoCairo
 import cairo
 
+import pixel_common
+
 # Prevent zombie child processes from subprocess.Popen
 try:
     signal.signal(signal.SIGCHLD, signal.SIG_IGN)
@@ -375,14 +377,19 @@ class MaterialYouDesktop(Gtk.Window):
 
     def load_launcher_apps(self):
         home = os.path.expanduser("~")
-        wh_launch = os.path.join(home, "Applications/whatsapp-pwa/launch.sh")
-        ytm_launch = os.path.join(home, "Applications/youtube-music/launch.sh")
+        # Companion scripts -> installed desktop entries -> web fallbacks
+        wh_launch = (pixel_common.companion_file("whatsapp", "launch.sh")
+                     or pixel_common.desktop_app_launch_cmd(pixel_common.find_desktop_app(["whatsapp"]))
+                     or "google-chrome https://web.whatsapp.com")
+        ytm_launch = (pixel_common.companion_file("youtube_music", "launch.sh")
+                      or pixel_common.desktop_app_launch_cmd(pixel_common.find_desktop_app(["youtube music", "youtube-music", "youtubemusic"]))
+                      or "google-chrome https://music.youtube.com")
         default_apps = [
             {"name": "Chrome", "icon": "🌐", "cmd": "google-chrome", "bg": "#D7F0FA"},
-            {"name": "WhatsApp", "icon": "💬", "cmd": wh_launch if os.path.exists(wh_launch) else "google-chrome https://web.whatsapp.com", "bg": "#FFD6DC"},
+            {"name": "WhatsApp", "icon": "💬", "cmd": wh_launch, "bg": "#FFD6DC"},
             {"name": "Files", "icon": "📁", "cmd": f"nemo {home}", "bg": "#EDE9FE"},
             {"name": "Terminal", "icon": "💻", "cmd": "gnome-terminal", "bg": "#E0F2FE"},
-            {"name": "YouTube Music", "icon": "🎵", "cmd": ytm_launch if os.path.exists(ytm_launch) else "google-chrome https://music.youtube.com", "bg": "#D8F1FA"},
+            {"name": "YouTube Music", "icon": "🎵", "cmd": ytm_launch, "bg": "#D8F1FA"},
             {"name": "Telegram", "icon": "✈️", "cmd": "flatpak run org.telegram.desktop", "bg": "#E0F2FE"},
             {"name": "Settings", "icon": "⚙️", "cmd": "cinnamon-settings", "bg": "#EDE9FE"},
             {"name": "Notes", "icon": "📝", "cmd": f"xed {NOTES_FILE}", "bg": "#FFD6DC"}
@@ -823,7 +830,7 @@ class MaterialYouDesktop(Gtk.Window):
     def update_sun_times(self):
         def worker():
             try:
-                prayer_helper = os.path.expanduser("~/Applications/prayer-applet/helper.py")
+                prayer_helper = pixel_common.companion_file("prayer_applet", "helper.py")
                 if os.path.exists(prayer_helper):
                     cmd = [sys.executable, prayer_helper]
                     res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
@@ -2060,17 +2067,28 @@ class MaterialYouDesktop(Gtk.Window):
         return False
 
     def launch_or_focus_whatsapp(self):
-        wh_launch = os.path.expanduser("~/Applications/whatsapp-pwa/launch.sh")
-        if os.path.exists(wh_launch):
+        # Companion script -> installed desktop entry -> web fallback
+        wh_launch = pixel_common.companion_file("whatsapp", "launch.sh")
+        if wh_launch:
             try:
                 subprocess.Popen([wh_launch], start_new_session=True)
             except Exception as e:
                 print(f"[MaterialYou] WhatsApp launch error: {e}")
-        else:
+            return
+
+        wh_cmd = pixel_common.desktop_app_launch_cmd(
+            pixel_common.find_desktop_app(["whatsapp"]))
+        if wh_cmd:
             try:
-                subprocess.Popen(["google-chrome", "https://web.whatsapp.com"], start_new_session=True)
+                subprocess.Popen(shlex.split(wh_cmd), start_new_session=True)
             except Exception as e:
-                print(f"[MaterialYou] WhatsApp web launch error: {e}")
+                print(f"[MaterialYou] WhatsApp launch error: {e}")
+            return
+
+        try:
+            subprocess.Popen(["google-chrome", "https://web.whatsapp.com"], start_new_session=True)
+        except Exception as e:
+            print(f"[MaterialYou] WhatsApp web launch error: {e}")
 
     def mpris_call(self, method_name):
         if not self.media_player_bus:

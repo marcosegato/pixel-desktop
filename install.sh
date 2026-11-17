@@ -113,7 +113,7 @@ for svc in "${SERVICES[@]}"; do
     SRC_FILE="$SCRIPT_DIR/systemd/$svc"
     DST_FILE="$SYSTEMD_USER_DIR/$svc"
     if [ -f "$SRC_FILE" ]; then
-        sed "s|%h/Applications/pixel-desktop|$SCRIPT_DIR|g" "$SRC_FILE" > "$DST_FILE"
+        sed "s|@PIXEL_DESKTOP_DIR@|$SCRIPT_DIR|g" "$SRC_FILE" > "$DST_FILE"
         echo "  - Installed: $svc"
     fi
 done

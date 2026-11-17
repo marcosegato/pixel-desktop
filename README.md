@@ -54,13 +54,13 @@
 
 ### 1-Click Installation via Script
 
-1. Clone this repository:
+1. Clone this repository — any location works (e.g. `~/src/pixel-desktop`, `~/Documents/pixel-desktop`):
    ```bash
-   git clone https://github.com/<username>/pixel-desktop.git ~/Applications/pixel-desktop
-   cd ~/Applications/pixel-desktop
+   git clone https://github.com/<username>/pixel-desktop.git
+   cd pixel-desktop
    ```
 
-2. Run the installer script:
+2. Run the installer script from that directory:
    ```bash
    ./install.sh
    ```
@@ -69,7 +69,7 @@
 The installer script will automatically:
 * Check and install system dependency packages (`python3-gi`, `gir1.2-wnck-3.0`, `python3-xlib`, `wmctrl`, etc.).
 * Install the official *Google Sans* fonts to `~/.local/share/fonts/`.
-* Register and enable 4 `systemd --user` background services.
+* Register and enable 4 `systemd --user` background services, pointing at the directory you cloned to.
 * Configure the Cinnamon `Alt+Tab` shortcut to the Pixel Recent Apps Switcher.
 
 ---
@@ -96,6 +96,19 @@ All configuration files are stored neatly in standard JSON / text format in `~/.
 | **`~/.config/pixel-widgets-pos.json`** | Desktop widget position coordinates (saved automatically when widgets are moved with a mouse drag). |
 | **`~/.config/quick-notes.txt`** | Text content of the quick notes desktop widget. |
 | **`~/.config/weather-config.json`** | Manual weather coordinate settings (city, latitude, longitude) when not using IP auto-detect. |
+| **`~/.config/pixel-desktop.json`** | Optional overrides for companion-app locations (see below). |
+
+Companion apps (WhatsApp PWA, YouTube Music, prayer-applet) are discovered automatically in this order: the path set in `~/.config/pixel-desktop.json`, then the well-known `~/Applications/<name>` location, then any standard installed application (deb/flatpak) via its desktop entry, then a web fallback. To point a companion at a custom directory:
+
+```json
+{
+  "companion_apps": {
+    "whatsapp": "~/opt/whatsapp-pwa",
+    "youtube_music": "~/apps/youtube-music",
+    "prayer_applet": "~/dev/prayer-applet"
+  }
+}
+```
 
 ---
 
@@ -120,7 +133,7 @@ systemctl --user stop pixel-dock pixel-desktop pixel-recent-apps pixel-app-drawe
 
 To remove this suite and restore the Cinnamon desktop shortcuts to their default settings:
 ```bash
-cd ~/Applications/pixel-desktop
+cd /path/to/pixel-desktop   # the directory you cloned to
 ./uninstall.sh
 ```
 

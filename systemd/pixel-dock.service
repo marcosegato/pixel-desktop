@@ -5,7 +5,7 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 %h/Applications/pixel-desktop/pixel_dock.py
+ExecStart=/usr/bin/python3 @PIXEL_DESKTOP_DIR@/pixel_dock.py
 Restart=always
 RestartSec=2
 KillMode=process

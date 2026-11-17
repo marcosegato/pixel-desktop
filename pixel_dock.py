@@ -31,6 +31,8 @@ gi.require_version('Gio', '2.0')
 from gi.repository import Gtk, Gdk, GdkPixbuf, GLib, Gio, Pango, PangoCairo
 import cairo
 
+import pixel_common
+
 try:
     from Xlib import X, display, protocol
 except ImportError:
@@ -289,18 +291,31 @@ class PixelDock(Gtk.Window):
 
         if not raw:
             home = os.path.expanduser("~")
-            wh_launch = os.path.join(home, "Applications/whatsapp-pwa/launch.sh")
-            wh_icon = os.path.join(home, "Applications/whatsapp-pwa/icons/whatsapp.svg")
-            ytm_launch = os.path.join(home, "Applications/youtube-music/launch.sh")
-            ytm_icon = os.path.join(home, "Applications/youtube-music/youtube-music.svg")
             notes_path = os.path.join(home, ".config/quick-notes.txt")
 
+            # WhatsApp & YouTube Music: bespoke companion script -> installed
+            # desktop entry -> web fallback. Icons: companion asset -> desktop
+            # entry icon -> theme icon.
+            wh_launch = pixel_common.companion_file("whatsapp", "launch.sh")
+            if not wh_launch:
+                wh_app = pixel_common.find_desktop_app(["whatsapp"])
+                wh_launch = pixel_common.desktop_app_launch_cmd(wh_app)
+            wh_icon = (pixel_common.companion_file("whatsapp", "icons/whatsapp.svg")
+                       or pixel_common.desktop_app_icon_spec(pixel_common.find_desktop_app(["whatsapp"])))
+
+            ytm_launch = pixel_common.companion_file("youtube_music", "launch.sh")
+            if not ytm_launch:
+                ytm_app = pixel_common.find_desktop_app(["youtube music", "youtube-music", "youtubemusic"])
+                ytm_launch = pixel_common.desktop_app_launch_cmd(ytm_app)
+            ytm_icon = (pixel_common.companion_file("youtube_music", "youtube-music.svg")
+                        or pixel_common.desktop_app_icon_spec(pixel_common.find_desktop_app(["youtube music", "youtube-music", "youtubemusic"])))
+
             raw = [
-                {"name": "WhatsApp", "icon": wh_icon if os.path.exists(wh_icon) else "whatsapp", "cmd": wh_launch if os.path.exists(wh_launch) else "google-chrome https://web.whatsapp.com", "bg": "#E8F5E9"},
+                {"name": "WhatsApp", "icon": wh_icon or "whatsapp", "cmd": wh_launch or "google-chrome https://web.whatsapp.com", "bg": "#E8F5E9"},
                 {"name": "Chrome", "icon": "google-chrome", "cmd": "google-chrome", "bg": "#FFFFFF"},
                 {"name": "Files", "icon": "system-file-manager", "cmd": f"nemo {home}", "bg": "#E8EAED"},
                 {"name": "Settings", "icon": "preferences-system", "cmd": "cinnamon-settings", "bg": "#E8EAED"},
-                {"name": "YouTube Music", "icon": ytm_icon if os.path.exists(ytm_icon) else "multimedia-audio-player", "cmd": ytm_launch if os.path.exists(ytm_launch) else "google-chrome https://music.youtube.com", "bg": "#FFFFFF"},
+                {"name": "YouTube Music", "icon": ytm_icon or "multimedia-audio-player", "cmd": ytm_launch or "google-chrome https://music.youtube.com", "bg": "#FFFFFF"},
                 {"name": "Telegram", "icon": "org.telegram.desktop", "cmd": "flatpak run org.telegram.desktop", "bg": "#E1F5FE"},
                 {"name": "Terminal", "icon": "utilities-terminal", "cmd": "gnome-terminal", "bg": "#ECEFF1"},
                 {"name": "Notes", "icon": "accessories-text-editor", "cmd": f"xed {notes_path}", "bg": "#FEF7E0"}
@@ -915,8 +930,17 @@ class PixelDock(Gtk.Window):
         name = app.get("name", "")
 
         if "whatsapp" in name.lower() or "whatsapp" in cmd.lower():
-            wh_launch = os.path.expanduser("~/Applications/whatsapp-pwa/launch.sh")
-            if os.path.exists(wh_launch):
+            wh_launch = pixel_common.companion_file("whatsapp", "launch.sh")
+            if not wh_launch:
+                wh_cmd = pixel_common.desktop_app_launch_cmd(
+                    pixel_common.find_desktop_app(["whatsapp"]))
+                if wh_cmd:
+                    try:
+                        subprocess.Popen(shlex.split(wh_cmd), start_new_session=True)
+                    except Exception as e:
+                        print(f"[PixelDock] WhatsApp launch error: {e}")
+                    return
+            elif wh_launch:
                 try:
                     subprocess.Popen([wh_launch], start_new_session=True)
                 except Exception as e:
@@ -984,19 +1008,21 @@ class PixelDock(Gtk.Window):
         running_xids = app.get("running_xids", [])
 
         # 1. Custom Actions / Profiles
-        wh_base = os.path.expanduser("~/Applications/whatsapp-pwa")
-        if ("whatsapp" in name.lower() or "whatsapp" in cmd.lower()) and os.path.exists(os.path.join(wh_base, WHATSAPP_WORK_SCRIPT)):
+        wh_work = pixel_common.companion_file("whatsapp", WHATSAPP_WORK_SCRIPT)
+        if ("whatsapp" in name.lower() or "whatsapp" in cmd.lower()) and wh_work:
             # WhatsApp 3-Profile Menu
             item_k = Gtk.MenuItem(label="🟢  WhatsApp - Work")
-            item_k.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, WHATSAPP_WORK_SCRIPT)], start_new_session=True))
+            item_k.connect("activate", lambda w: subprocess.Popen([wh_work], start_new_session=True))
             menu.append(item_k)
 
+            wh_admin = pixel_common.companion_file("whatsapp", WHATSAPP_ADMIN_SCRIPT)
             item_a = Gtk.MenuItem(label="🟠  WhatsApp - AdminTech")
-            item_a.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, WHATSAPP_ADMIN_SCRIPT)], start_new_session=True))
+            item_a.connect("activate", lambda w: subprocess.Popen([wh_admin], start_new_session=True))
             menu.append(item_a)
 
+            wh_personal = pixel_common.companion_file("whatsapp", WHATSAPP_PERSONAL_SCRIPT)
             item_p = Gtk.MenuItem(label="🟣  WhatsApp - Personal")
-            item_p.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, WHATSAPP_PERSONAL_SCRIPT)], start_new_session=True))
+            item_p.connect("activate", lambda w: subprocess.Popen([wh_personal], start_new_session=True))
             menu.append(item_p)
 
             item_all = Gtk.MenuItem(label="🚀  Open All 3 Profiles at Once")
