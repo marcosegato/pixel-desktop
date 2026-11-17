@@ -829,10 +829,12 @@ class MaterialYouDesktop(Gtk.Window):
                     res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
                     if res.returncode == 0:
                         data = json.loads(res.stdout)
+                        # Match the prayer-applet's English output names.
                         for p in data.get("all_prayers", []):
-                            if p.get("name") == "Terbit":
+                            name = p.get("name", "").lower()
+                            if name == "sunrise":
                                 self.sunrise_time = p.get("time", "05:00")
-                            elif p.get("name") == "Maghrib":
+                            elif name == "sunset":
                                 self.sunset_time = p.get("time", "17:27")
                         GLib.idle_add(self.queue_draw_area, self.calendar_x, self.calendar_y, CALENDAR_W, CALENDAR_H)
             except Exception:

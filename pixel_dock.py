@@ -50,6 +50,12 @@ SHOWN_Y = SCREEN_HEIGHT - WINDOW_H  # 1002
 HIDDEN_Y = SCREEN_HEIGHT + 15       # 1095 (completely offscreen below screen bottom)
 LAUNCHER_CONFIG_FILE = os.path.expanduser("~/.config/pixel-launcher-apps.json")
 
+# WhatsApp Multi profile identifiers.
+WHATSAPP_WORK_SCRIPT     = "launch-work.sh"
+WHATSAPP_ADMIN_SCRIPT    = "launch-admintech.sh"
+WHATSAPP_PERSONAL_SCRIPT = "launch-personal.sh"
+WHATSAPP_MATCH_KEYS      = ["whatsapp", "whatsapp-work", "whatsapp-admintech", "whatsapp-personal"]
+
 
 def hex_to_rgb(hex_str):
     hex_str = hex_str.lstrip('#')
@@ -489,7 +495,7 @@ class PixelDock(Gtk.Window):
                             p_cmd = p_app.get("cmd", "").lower()
                             p_keys = []
                             if "whatsapp" in p_name or "whatsapp" in p_cmd:
-                                p_keys = ["whatsapp", "whatsapp-kantor", "whatsapp-adminteknik", "whatsapp-pribadi"]
+                                p_keys = list(WHATSAPP_MATCH_KEYS)
                             elif "youtube" in p_name or "music" in p_name:
                                 p_keys = ["cinhimbnkkaeohfgghhklpknlkffjgod", "crx_cinhimbnkkaeohfgghhklpknlkffjgod", "youtube-music", "youtube music"]
                             elif "chrome" in p_name or "chrome" in p_cmd:
@@ -979,18 +985,18 @@ class PixelDock(Gtk.Window):
 
         # 1. Custom Actions / Profiles
         wh_base = os.path.expanduser("~/Applications/whatsapp-pwa")
-        if ("whatsapp" in name.lower() or "whatsapp" in cmd.lower()) and os.path.exists(os.path.join(wh_base, "launch-kantor.sh")):
+        if ("whatsapp" in name.lower() or "whatsapp" in cmd.lower()) and os.path.exists(os.path.join(wh_base, WHATSAPP_WORK_SCRIPT)):
             # WhatsApp 3-Profile Menu
             item_k = Gtk.MenuItem(label="🟢  WhatsApp - Work")
-            item_k.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, "launch-kantor.sh")], start_new_session=True))
+            item_k.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, WHATSAPP_WORK_SCRIPT)], start_new_session=True))
             menu.append(item_k)
 
             item_a = Gtk.MenuItem(label="🟠  WhatsApp - AdminTech")
-            item_a.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, "launch-adminteknik.sh")], start_new_session=True))
+            item_a.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, WHATSAPP_ADMIN_SCRIPT)], start_new_session=True))
             menu.append(item_a)
 
             item_p = Gtk.MenuItem(label="🟣  WhatsApp - Personal")
-            item_p.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, "launch-pribadi.sh")], start_new_session=True))
+            item_p.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, WHATSAPP_PERSONAL_SCRIPT)], start_new_session=True))
             menu.append(item_p)
 
             item_all = Gtk.MenuItem(label="🚀  Open All 3 Profiles at Once")
