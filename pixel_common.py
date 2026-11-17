@@ -20,6 +20,8 @@ Desktop-entry discovery:
 
 import os
 import json
+import shutil
+import subprocess
 
 # The suite's own installation directory (works wherever the repo is cloned).
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -128,3 +130,50 @@ def desktop_app_icon_spec(app):
     except Exception:
         pass
     return None
+
+
+# ---------------------------------------------------------------------
+# Desktop environment helpers (GTK/GNOME-based: Cinnamon, GNOME, etc.)
+# ---------------------------------------------------------------------
+
+_settings_cmd_cache = None
+
+# Panels whose names differ between cinnamon-settings and gnome-control-center.
+GNOME_PANEL_ALIASES = {
+    "calendar": "datetime",
+}
+
+
+def settings_cmd():
+    """Command of the system settings GUI, whatever the GTK/GNOME environment."""
+    global _settings_cmd_cache
+    if _settings_cmd_cache is None:
+        _settings_cmd_cache = (shutil.which("cinnamon-settings")
+                               or shutil.which("gnome-control-center")
+                               or "gnome-control-center")
+    return _settings_cmd_cache
+
+
+def open_settings(panel=""):
+    """Open the system settings GUI, optionally on a specific panel."""
+    cmd = settings_cmd()
+    if "gnome-control-center" in cmd:
+        panel = GNOME_PANEL_ALIASES.get(panel, panel)
+    args = [cmd] + ([panel] if panel else [])
+    subprocess.Popen(args)
+
+
+def session_quit_cmd():
+    """Command list to power off the session (Cinnamon or GNOME)."""
+    if shutil.which("cinnamon-session-quit"):
+        return ["cinnamon-session-quit", "--power-off"]
+    return ["gnome-session-quit", "--power-off"]
+
+
+def lock_cmd():
+    """Command list to lock the screen on any GTK/GNOME-based environment."""
+    if shutil.which("cinnamon-screensaver-command"):
+        return ["cinnamon-screensaver-command", "--lock"]
+    if shutil.which("gnome-screensaver-command"):
+        return ["gnome-screensaver-command", "--lock"]
+    return ["loginctl", "lock-session"]

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Material You (MD3) Pastel Desktop Environment for Linux Mint (Cinnamon).
+Material You (MD3) Pastel Desktop Environment for Debian-based Linux
+(GTK/GNOME-based desktop environments such as Cinnamon or GNOME).
 Designed for ThinkPad X1 Carbon Gen 6.
 - 100% REAL & FULLY FUNCTIONAL WIDGETS (Not mockups!):
   * Live Clock & Calendar (opens calendar settings)
@@ -391,7 +392,7 @@ class MaterialYouDesktop(Gtk.Window):
             {"name": "Terminal", "icon": "💻", "cmd": "gnome-terminal", "bg": "#E0F2FE"},
             {"name": "YouTube Music", "icon": "🎵", "cmd": ytm_launch, "bg": "#D8F1FA"},
             {"name": "Telegram", "icon": "✈️", "cmd": "flatpak run org.telegram.desktop", "bg": "#E0F2FE"},
-            {"name": "Settings", "icon": "⚙️", "cmd": "cinnamon-settings", "bg": "#EDE9FE"},
+            {"name": "Settings", "icon": "⚙️", "cmd": pixel_common.settings_cmd(), "bg": "#EDE9FE"},
             {"name": "Notes", "icon": "📝", "cmd": f"xed {NOTES_FILE}", "bg": "#FFD6DC"}
         ]
 
@@ -927,7 +928,7 @@ class MaterialYouDesktop(Gtk.Window):
             self.icon_cache[cache_key] = pb
         return pb
 
-    def toggle_cinnamon_menu(self):
+    def toggle_app_drawer(self):
         try:
             import socket
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -1914,19 +1915,19 @@ class MaterialYouDesktop(Gtk.Window):
                 if target:
                     subprocess.Popen(["nemo", target])
             elif cand == "clock":
-                subprocess.Popen(["cinnamon-settings", "calendar"])
+                pixel_common.open_settings("calendar")
             elif cand == "calendar":
-                subprocess.Popen(["cinnamon-settings", "calendar"])
+                pixel_common.open_settings("calendar")
             elif cand == "weather_battery":
                 if event.x <= self.weather_bat_x + 130:
                     subprocess.Popen(["google-chrome", "https://weather.com/weather/today/l/-7.98,112.63"])
                 else:
-                    subprocess.Popen(["cinnamon-settings", "power"])
+                    pixel_common.open_settings("power")
             elif cand == "date_notes":
                 if event.x >= self.date_notes_x + 100:
                     subprocess.Popen(["xed", NOTES_FILE])
                 else:
-                    subprocess.Popen(["cinnamon-settings", "calendar"])
+                    pixel_common.open_settings("calendar")
             elif cand == "music":
                 res = subprocess.run(["wmctrl", "-a", "YouTube Music"])
                 if res.returncode != 0:
@@ -1935,7 +1936,7 @@ class MaterialYouDesktop(Gtk.Window):
                 drawer_x = self.dock_x + 12
                 # App Drawer Button (4-dots) -> toggle app drawer
                 if drawer_x <= event.x <= drawer_x + 40 and self.dock_y + 8 <= event.y <= self.dock_y + 52:
-                    self.toggle_cinnamon_menu()
+                    self.toggle_app_drawer()
                     return True
 
                 recents_x = drawer_x + 40 + 8
@@ -1988,7 +1989,7 @@ class MaterialYouDesktop(Gtk.Window):
         if self.control_x <= x <= self.control_x + CONTROL_W and self.control_y <= y <= self.control_y + CONTROL_H:
             # Header Power Button (Shutdown / Restart / Suspend)
             if (x - (self.control_x + CONTROL_W - 42))**2 + (y - (self.control_y + 36))**2 <= 22**2:
-                subprocess.Popen(["cinnamon-session-quit", "--power-off"])
+                subprocess.Popen(pixel_common.session_quit_cmd())
                 return True
 
             # Volume Mute Icon
@@ -2020,17 +2021,17 @@ class MaterialYouDesktop(Gtk.Window):
                     if tx <= x <= tx + tw and ty <= y <= ty + th:
                         idx = row * 2 + col
                         if idx == 0:
-                            subprocess.Popen(["cinnamon-settings", "network"])
+                            pixel_common.open_settings("network")
                         elif idx == 1:
-                            subprocess.Popen(["cinnamon-settings", "bluetooth"])
+                            pixel_common.open_settings("bluetooth")
                         elif idx == 2:
                             self.toggle_dark_mode()
                         elif idx == 3:
-                            subprocess.Popen(["cinnamon-settings"])
+                            pixel_common.open_settings()
                         elif idx == 4:
-                            subprocess.Popen(["cinnamon-settings", "power"])
+                            pixel_common.open_settings("power")
                         elif idx == 5:
-                            subprocess.Popen(["cinnamon-screensaver-command", "--lock"])
+                            subprocess.Popen(pixel_common.lock_cmd())
                         return True
 
         # 9. Dynamic Bottom Floating Dock (Support both click & drag)
@@ -2129,18 +2130,22 @@ class MaterialYouDesktop(Gtk.Window):
                 return
             except Exception as e:
                 print(f"[MaterialYou] Dark mode toggle error: {e}")
-        # Fallback Cinnamon interface toggle
-        try:
-            s = Gio.Settings.new("org.cinnamon.desktop.interface")
-            cur = s.get_string("gtk-theme")
-            if "Dark" in cur:
-                s.set_string("gtk-theme", cur.replace("Dark", "Light").replace("-dark", "-light"))
-            else:
-                s.set_string("gtk-theme", cur.replace("Light", "Dark").replace("-light", "-dark"))
-            self.is_dark_mode = not self.is_dark_mode
-            self.queue_draw()
-        except Exception:
-            pass
+        # Fallback GTK interface toggle (works on GNOME and Cinnamon schemas)
+        for schema in ("org.gnome.desktop.interface", "org.cinnamon.desktop.interface"):
+            try:
+                s = Gio.Settings.new(schema)
+                cur = s.get_string("gtk-theme")
+                if not cur:
+                    continue
+                if "Dark" in cur:
+                    s.set_string("gtk-theme", cur.replace("Dark", "Light").replace("-dark", "-light"))
+                else:
+                    s.set_string("gtk-theme", cur.replace("Light", "Dark").replace("-light", "-dark"))
+                self.is_dark_mode = not self.is_dark_mode
+                self.queue_draw()
+                break
+            except Exception:
+                continue
 
     def activate_search(self):
         try:
@@ -2184,7 +2189,7 @@ class MaterialYouDesktop(Gtk.Window):
             "files": lambda: subprocess.Popen(["nemo", os.path.expanduser("~")]),
             "nemo": lambda: subprocess.Popen(["nemo", os.path.expanduser("~")]),
             "chrome": lambda: subprocess.Popen(["google-chrome"]),
-            "settings": lambda: subprocess.Popen(["cinnamon-settings"]),
+            "settings": lambda: pixel_common.open_settings(),
             "notes": lambda: subprocess.Popen(["xed", NOTES_FILE]),
         }
         if query.lower() in apps_map:

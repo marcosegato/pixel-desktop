@@ -1,6 +1,6 @@
 # Google Pixel UI / GoogleBook Desktop Suite for Linux
 
-> **Material Design 3 (Android 15 / 16 / 17 & ChromeOS Pixelbook) Desktop Environment for Linux Mint (Cinnamon / X11)**  
+> **Material Design 3 (Android 15 / 16 / 17 & ChromeOS Pixelbook) Desktop Environment for Debian-based Linux distributions (GTK/GNOME-based desktop environments / X11)**  
 > Fast, native vector-rendered desktop suite written in Python 3, GTK+ 3, and Cairo with pure event-driven architecture (0.0% CPU when idle).
 
 ---
@@ -27,7 +27,7 @@
 * **System Power Button (`⏻`)**: Quick access to shutdown, restart, or sleep dialogs (*shutdown / restart / suspend*).
 
 ### 3. Recent Apps Switcher / Alt+Tab Replacement (`pixel_recent_apps.py`)
-* **Overlapping Card Deck Carousel**: Fully replaces the built-in Cinnamon window switcher.
+* **Overlapping Card Deck Carousel**: Fully replaces the desktop environment's built-in window switcher.
 * **Natural Alt+Tab Cycling**: Hold `Alt`, press `Tab` to select an app, and the moment `Alt` is released, the selected window is immediately activated and brought to front.
 * **Real-Time Window Previews**: Live window preview screenshots via `GdkX11` & `libwnck`.
 * **Header Telemetry & Clear All**: Displays real-time RAM usage in the top bar and a round *"Close All"* button at the bottom.
@@ -49,7 +49,7 @@
 ## 🚀 Installation Guide (Quick Start)
 
 ### System Requirements (Prerequisites)
-* **Distro**: Linux Mint (Cinnamon) 21.x / 22.x, Ubuntu, or any Debian-based distro with an X11 session.
+* **Distro**: any Debian-based distribution (Linux Mint, Ubuntu, Debian, etc.) with an X11 session and a GTK/GNOME-based desktop environment (Cinnamon, GNOME, ...).
 * **Python**: Python 3.10 or above.
 
 ### 1-Click Installation via Script
@@ -70,7 +70,7 @@ The installer script will automatically:
 * Check and install system dependency packages (`python3-gi`, `gir1.2-wnck-3.0`, `python3-xlib`, `wmctrl`, etc.).
 * Install the official *Google Sans* fonts to `~/.local/share/fonts/`.
 * Register and enable 4 `systemd --user` background services, pointing at the directory you cloned to.
-* Configure the Cinnamon `Alt+Tab` shortcut to the Pixel Recent Apps Switcher.
+* Configure the desktop environment's `Alt+Tab` shortcut to the Pixel Recent Apps Switcher (Cinnamon and GNOME are supported out of the box).
 
 ---
 
@@ -131,7 +131,7 @@ systemctl --user stop pixel-dock pixel-desktop pixel-recent-apps pixel-app-drawe
 
 ## 🗑️ Uninstallation
 
-To remove this suite and restore the Cinnamon desktop shortcuts to their default settings:
+To remove this suite and restore the desktop environment's shortcuts to their default settings:
 ```bash
 cd /path/to/pixel-desktop   # the directory you cloned to
 ./uninstall.sh

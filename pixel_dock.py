@@ -314,7 +314,7 @@ class PixelDock(Gtk.Window):
                 {"name": "WhatsApp", "icon": wh_icon or "whatsapp", "cmd": wh_launch or "google-chrome https://web.whatsapp.com", "bg": "#E8F5E9"},
                 {"name": "Chrome", "icon": "google-chrome", "cmd": "google-chrome", "bg": "#FFFFFF"},
                 {"name": "Files", "icon": "system-file-manager", "cmd": f"nemo {home}", "bg": "#E8EAED"},
-                {"name": "Settings", "icon": "preferences-system", "cmd": "cinnamon-settings", "bg": "#E8EAED"},
+                {"name": "Settings", "icon": "preferences-system", "cmd": pixel_common.settings_cmd(), "bg": "#E8EAED"},
                 {"name": "YouTube Music", "icon": ytm_icon or "multimedia-audio-player", "cmd": ytm_launch or "google-chrome https://music.youtube.com", "bg": "#FFFFFF"},
                 {"name": "Telegram", "icon": "org.telegram.desktop", "cmd": "flatpak run org.telegram.desktop", "bg": "#E1F5FE"},
                 {"name": "Terminal", "icon": "utilities-terminal", "cmd": "gnome-terminal", "bg": "#ECEFF1"},
@@ -524,7 +524,7 @@ class PixelDock(Gtk.Window):
                             elif "telegram" in p_name:
                                 p_keys = ["telegram", "telegramdesktop", "org.telegram.desktop"]
                             elif "settings" in p_name:
-                                p_keys = ["cinnamon-settings"]
+                                p_keys = ["cinnamon-settings", "gnome-control-center"]
                             elif "notes" in p_name or "xed" in p_cmd:
                                 p_keys = ["xed"]
                             else:
@@ -1076,7 +1076,7 @@ class PixelDock(Gtk.Window):
 
         elif "settings" in name.lower():
             item_s = Gtk.MenuItem(label="⚙️  System Settings")
-            item_s.connect("activate", lambda w: subprocess.Popen(["cinnamon-settings"], start_new_session=True))
+            item_s.connect("activate", lambda w: pixel_common.open_settings())
             menu.append(item_s)
 
         elif "telegram" in name.lower():
