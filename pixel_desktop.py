@@ -418,9 +418,9 @@ class MaterialYouDesktop(Gtk.Window):
     def load_quick_notes(self):
         if not os.path.exists(NOTES_FILE):
             default_content = (
-                "• Periksa efisiensi daya & baterai ThinkPad\n"
-                "• Pantau stabilitas stiker WhatsMulti\n"
-                "• Target kipas senyap 0 RPM & suhu dingin\n"
+                "• Check ThinkPad power & battery efficiency\n"
+                "• Monitor WhatsMulti sticker stability\n"
+                "• Target silent 0 RPM fan & cool temps\n"
             )
             try:
                 os.makedirs(os.path.dirname(NOTES_FILE), exist_ok=True)
@@ -436,11 +436,11 @@ class MaterialYouDesktop(Gtk.Window):
                     self.quick_notes = lines[:3]
                 else:
                     self.quick_notes = [
-                        "• (Catatan saat ini kosong)",
-                        "• Klik di sini untuk menambahkan catatan baru..."
+                        "• (Notes currently empty)",
+                        "• Click here to add a new note..."
                     ]
         except Exception:
-            self.quick_notes = ["• Klik untuk mengedit catatan Anda..."]
+            self.quick_notes = ["• Click to edit your notes..."]
 
     def init_file_monitors(self):
         """Live file monitoring so changes in notes or dock config reflect INSTANTLY."""
@@ -1069,7 +1069,7 @@ class MaterialYouDesktop(Gtk.Window):
         cr.move_to(x + 50, y + 23)
         PangoCairo.show_layout(cr, l_temp)
 
-        # 2. Scalloped Rosette Hardware Badge (Baterai, Suhu Prosesor, & RPM Kipas Real-time)
+        # 2. Scalloped Rosette Hardware Badge (Battery, CPU Temp, & Fan RPM Real-time)
         x2 = x + 138
         xc = x2 + 48
         yc = y + 40
@@ -1086,7 +1086,7 @@ class MaterialYouDesktop(Gtk.Window):
         cr.move_to(xc - bat_rect.width / 2, yc - bat_rect.height / 2 - 8)
         PangoCairo.show_layout(cr, l_bat)
 
-        # Real-time sub-pill: Suhu Prosesor & RPM Kipas Real-time (Material 3 Primary Container)
+        # Real-time sub-pill: CPU Temp & Fan RPM (Material 3 Primary Container)
         pill_w = 78
         pill_h = 16
         pill_x = xc - pill_w / 2
@@ -1300,7 +1300,7 @@ class MaterialYouDesktop(Gtk.Window):
         self.draw_rounded_card(cr, x, y, w, h, 26)
         self.set_card_background(cr)
 
-        # Left Sun Times Box (Matahari Terbit & Terbenam Sesuai Tanggal)
+        # Left Sun Times Box (Sunrise & Sunset)
         av_w = 110
         av_h = 175
         av_x = x + 15
@@ -1316,13 +1316,13 @@ class MaterialYouDesktop(Gtk.Window):
         ts = self.get_text_secondary_color()
         accent = self.get_accent_primary_color()
 
-        # Section 1: Terbit (Sunrise) - Vector Symbolic Icon (Replaces Emoji)
+        # Section 1: Sunrise - Vector Symbolic Icon (Replaces Emoji)
         pb_sun = self.get_symbolic_pixbuf("weather-clear-symbolic", 16, accent)
         if pb_sun:
             Gdk.cairo_set_source_pixbuf(cr, pb_sun, av_x + 14, av_y + 16)
             cr.paint()
 
-        l_s1 = self.create_pango_layout("Terbit")
+        l_s1 = self.create_pango_layout("Sunrise")
         l_s1.set_font_description(Pango.FontDescription("Google Sans Medium 10"))
         cr.set_source_rgba(ts[0], ts[1], ts[2], ts[3])
         cr.move_to(av_x + 36, av_y + 15)
@@ -1344,13 +1344,13 @@ class MaterialYouDesktop(Gtk.Window):
         cr.line_to(av_x + av_w - 14, av_y + 86)
         cr.stroke()
 
-        # Section 2: Terbenam (Sunset) - Vector Symbolic Icon (Replaces Emoji)
+        # Section 2: Sunset - Vector Symbolic Icon (Replaces Emoji)
         pb_set = self.get_symbolic_pixbuf("weather-clear-night-symbolic", 16, accent)
         if pb_set:
             Gdk.cairo_set_source_pixbuf(cr, pb_set, av_x + 14, av_y + 98)
             cr.paint()
 
-        l_s2 = self.create_pango_layout("Terbenam")
+        l_s2 = self.create_pango_layout("Sunset")
         l_s2.set_font_description(Pango.FontDescription("Google Sans Medium 10"))
         cr.set_source_rgba(ts[0], ts[1], ts[2], ts[3])
         cr.move_to(av_x + 36, av_y + 97)
@@ -1757,8 +1757,8 @@ class MaterialYouDesktop(Gtk.Window):
         cr.move_to(sx + 14, sy + 10)
         PangoCairo.show_layout(cr, l_g)
 
-        # "Telusuri..." Search placeholder text
-        l_st = self.create_pango_layout("Telusuri...")
+        # "Search..." placeholder text
+        l_st = self.create_pango_layout("Search...")
         l_st.set_font_description(Pango.FontDescription("Google Sans Medium 11"))
         ts = self.get_text_secondary_color()
         cr.set_source_rgba(ts[0], ts[1], ts[2], 0.85)

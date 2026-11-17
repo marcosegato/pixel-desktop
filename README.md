@@ -5,120 +5,120 @@
 
 ---
 
-## 🌟 Fitur Utama (Key Features)
+## 🌟 Key Features
 
 ### 1. Floating Shelf Dock (`pixel_dock.py`)
-* **Material 3 Squircle Design**: Pil melayang (*floating pill*) dengan bayangan elevasi halus dan sudut melengkung khas Google Pixel.
-* **Integrasi Launcher & Kontrol**:
-  * Tombol **App Drawer (`⸬`)** di sisi kiri untuk membuka laci aplikasi.
-  * Tombol **Multitasking Overview (`▢`)** untuk melihat aplikasi yang sedang terbuka.
-  * **Bilah Pencarian Google**: Desain kapsul terpusat dengan logo warna-warni Google 'G'.
-* **Aplikasi Tersemat (*Pinned*) & Berjalan (*Running*)**:
-  * Dilengkapi indikator titik aktif (*running dot*).
-  * Pengaturan posisi ikon bebas via **Drag & Drop** (tersimpan otomatis).
-  * **Klik Kiri Cerdas**: Meminimalkan jendela aktif, memulihkan (*unminimize*) jendela yang diminimalkan, dan siklus bergantian jika ada banyak jendela pada aplikasi yang sama.
-  * **Klik Kanan Profil Aplikasi**: Menu profil terisolasi (WhatsApp Kantor/Admin/Pribadi, Google Chrome Jendela Baru & Incognito, Nemo Folder Home/Unduhan, Terminal, kontrol musik MPRIS, dsb.), serta toggle *"Sematkan ke Dock"* / *"Tutup Jendela"*.
-* **Auto-Hide / Auto-Dodge Cerdas**: Dock otomatis meluncur turun bersembunyi saat ada jendela aktif berstatus *Fullscreen*, *Maximized*, atau menutupi area dock bawah, dan muncul kembali seketika saat kursor menyentuh batas bawah layar.
+* **Material 3 Squircle Design**: A floating pill with subtle elevation shadows and curved corners characteristic of Google Pixel.
+* **Launcher & Control Integration**:
+  * The **App Drawer (`⸬`)** button on the left side to open the app drawer.
+  * The **Multitasking Overview (`▢`)** button to see currently open apps.
+  * **Google Search Bar**: A centered capsule design with the colorful Google 'G' logo.
+* **Pinned & Running Apps**:
+  * Includes a running dot indicator (*active dot*).
+  * Free icon position arrangement via **Drag & Drop** (saved automatically).
+  * **Smart Left Click**: Minimizes the active window, restores (*unminimizes*) minimized windows, and cycles between them when there are multiple windows of the same app.
+  * **Right-Click App Profile Menu**: An isolated profile menu (WhatsApp Work/Admin/Personal, Google Chrome New Window & Incognito, Nemo Home/Downloads folders, Terminal, MPRIS music controls, etc.), plus *"Pin to Dock"* / *"Close Window"* toggles.
+* **Smart Auto-Hide / Auto-Dodge**: The dock automatically slides down to hide when an active window is *Fullscreen*, *Maximized*, or covers the bottom dock area, and instantly reappears when the cursor touches the bottom edge of the screen.
 
 ### 2. Fullscreen App Drawer (`pixel_app_drawer.py`)
-* **Laci Aplikasi Modern**: Kartu Material 3 solid berlatar belakang teredup lembut (*frosted glass backdrop*).
-* **Pencarian Instan**: Pencarian aplikasi cepat berbasis fuzzy matching dengan fallback Google Web Search.
-* **Kategori Tab Chip**: Pemfilteran aplikasi berdasarkan kategori (*Semua, Kantor & Kerja, Komunikasi, Multimedia, Utilitas*).
-* **Tombol Daya Sistem (`⏻`)**: Akses cepat ke dialog matikan, mulai ulang, atau tidur (*shutdown / restart / suspend*).
+* **Modern App Drawer**: Solid Material 3 cards over a softly frosted background (*frosted glass backdrop*).
+* **Instant Search**: Fast fuzzy-matching app search with a Google Web Search fallback.
+* **Category Tab Chips**: App filtering by category (*All, Work & Productivity, Communication, Multimedia, Utilities*).
+* **System Power Button (`⏻`)**: Quick access to shutdown, restart, or sleep dialogs (*shutdown / restart / suspend*).
 
 ### 3. Recent Apps Switcher / Alt+Tab Replacement (`pixel_recent_apps.py`)
-* **Karosel Kartu Tumpang-Tindih (*Overlapping Card Deck*)**: Menggantikan switcher jendela bawaan Cinnamon secara penuh.
-* **Siklus Alami Alt+Tab**: Tahan `Alt`, tekan `Tab` untuk memilih aplikasi, dan begitu tombol `Alt` dilepas, jendela terpilih seketika diaktifkan ke depan.
-* **Pratinjau Jendela Real-Time**: Tangkapan layar live window preview via `GdkX11` & `libwnck`.
-* **Telemetri Header & Clear All**: Menampilkan penggunaan RAM real-time di bilah atas dan tombol bulat *"Tutup Semua"* di bagian bawah.
+* **Overlapping Card Deck Carousel**: Fully replaces the built-in Cinnamon window switcher.
+* **Natural Alt+Tab Cycling**: Hold `Alt`, press `Tab` to select an app, and the moment `Alt` is released, the selected window is immediately activated and brought to front.
+* **Real-Time Window Previews**: Live window preview screenshots via `GdkX11` & `libwnck`.
+* **Header Telemetry & Clear All**: Displays real-time RAM usage in the top bar and a round *"Close All"* button at the bottom.
 
 ### 4. Interactive Desktop Canvas (`pixel_desktop.py`)
-* **Widget Google Pixel Asli**:
-  * Jam Digital & Kalender besar dengan tipografi *Google Sans*.
-  * Cuaca Real-Time Open-Meteo dengan deteksi lokasi otomatis via IP geolokasi.
-  * Telemetri Suhu & Baterai ThinkPad.
-  * Pemutar Musik MPRIS dengan bilah gelombang audio bergerak (*squiggly progress wave*).
+* **Native Google Pixel Widgets**:
+  * Large Digital Clock & Calendar with *Google Sans* typography.
+  * Real-Time Open-Meteo Weather with automatic location detection via IP geolocation.
+  * ThinkPad Temperature & Battery Telemetry.
+  * MPRIS Music Player with a moving audio wave bar (*squiggly progress wave*).
   * Quick Folder Launchers (*Downloads, Documents, Pictures, Music*).
-  * Control Center interaktif dengan slider volume live dan tombol pintas (Dark Mode, Wi-Fi, Bluetooth).
-  * Quick Notes dengan pemantau berkas otomatis (*live watcher* `~/.config/quick-notes.txt`).
-* **Input Shape Click-Through**: Area transparan tembus klik ke wallpaper tanpa menghalangi desktop.
-* **0.0% CPU Idle**: Tidak ada loop polling aktif. Menggunakan DBus UPower, DBus MPRIS, dan minute-boundary tick.
+  * Interactive Control Center with a live volume slider and shortcut buttons (Dark Mode, Wi-Fi, Bluetooth).
+  * Quick Notes with an automatic file watcher (*live watcher* on `~/.config/quick-notes.txt`).
+* **Input Shape Click-Through**: Transparent click-through areas to the wallpaper without blocking the desktop.
+* **0.0% Idle CPU**: No active polling loops. Uses DBus UPower, DBus MPRIS, and a minute-boundary tick.
 
 ---
 
-## 🚀 Panduan Instalasi (Quick Start)
+## 🚀 Installation Guide (Quick Start)
 
-### Kebutuhan Sistem (Prerequisites)
-* **Distro**: Linux Mint (Cinnamon) 21.x / 22.x, Ubuntu, atau Debian-based distro dengan sesi X11.
-* **Python**: Python 3.10 ke atas.
+### System Requirements (Prerequisites)
+* **Distro**: Linux Mint (Cinnamon) 21.x / 22.x, Ubuntu, or any Debian-based distro with an X11 session.
+* **Python**: Python 3.10 or above.
 
-### Pemasangan 1-Klik via Skrip
+### 1-Click Installation via Script
 
-1. Clone repositori ini:
+1. Clone this repository:
    ```bash
    git clone https://github.com/<username>/pixel-desktop.git ~/Applications/pixel-desktop
    cd ~/Applications/pixel-desktop
    ```
 
-2. Jalankan skrip installer:
+2. Run the installer script:
    ```bash
    ./install.sh
    ```
-   *(Gunakan `./install.sh -y` jika ingin melewati konfirmasi paket otomatis).*
+   *(Use `./install.sh -y` to skip the automatic package confirmation prompt).*
 
-Skrip installer akan secara otomatis:
-* Memeriksa dan memasang paket dependensi sistem (`python3-gi`, `gir1.2-wnck-3.0`, `python3-xlib`, `wmctrl`, dsb.).
-* Memasang font resmi *Google Sans* ke `~/.local/share/fonts/`.
-* Mendaftarkan dan mengaktifkan 4 layanan background `systemd --user`.
-* Mengonfigurasi shortcut `Alt+Tab` Cinnamon ke Pixel Recent Apps Switcher.
+The installer script will automatically:
+* Check and install system dependency packages (`python3-gi`, `gir1.2-wnck-3.0`, `python3-xlib`, `wmctrl`, etc.).
+* Install the official *Google Sans* fonts to `~/.local/share/fonts/`.
+* Register and enable 4 `systemd --user` background services.
+* Configure the Cinnamon `Alt+Tab` shortcut to the Pixel Recent Apps Switcher.
 
 ---
 
-## ⌨️ Pintasan Keyboard (Keybindings)
+## ⌨️ Keyboard Shortcuts (Keybindings)
 
-| Pintasan Keyboard | Aksi / Fungsi |
+| Keyboard Shortcut | Action / Function |
 | :--- | :--- |
-| **`Alt + Tab`** / **`Super + Tab`** | Membuka Recent Apps Switcher (Tahan Alt, tekan Tab untuk navigasi, lepas Alt untuk memilih). |
-| **`Shift + Alt + Tab`** | Menavigasi Recent Apps Switcher ke arah belakang (*reverse*). |
-| **`Enter`** / **`Spasi`** | Mengaktifkan jendela yang sedang dipilih pada Recent Apps. |
-| **`Esc`** | Menutup overlay App Drawer atau Recent Apps tanpa memilih. |
-| **`Delete`** / **`Backspace`** | Menutup jendela yang sedang dipilih pada Recent Apps. |
+| **`Alt + Tab`** / **`Super + Tab`** | Opens the Recent Apps Switcher (Hold Alt, press Tab to navigate, release Alt to select). |
+| **`Shift + Alt + Tab`** | Navigates the Recent Apps Switcher backward (*reverse*). |
+| **`Enter`** / **`Space`** | Activates the currently selected window in Recent Apps. |
+| **`Esc`** | Closes the App Drawer or Recent Apps overlay without selecting. |
+| **`Delete`** / **`Backspace`** | Closes the currently selected window in Recent Apps. |
 
 ---
 
-## 🛠️ Kustomisasi & Berkas Konfigurasi
+## 🛠️ Customization & Configuration Files
 
-Semua berkas konfigurasi disimpan rapi dalam format JSON / teks standar di `~/.config/`:
+All configuration files are stored neatly in standard JSON / text format in `~/.config/`:
 
-| Berkas Konfigurasi | Deskripsi |
+| Configuration File | Description |
 | :--- | :--- |
-| **`~/.config/pixel-launcher-apps.json`** | Daftar aplikasi yang disematkan di Dock (`name`, `icon`, `cmd`, `bg`, `shape`). Perubahan langsung ter-update di layar tanpa perlu restart. |
-| **`~/.config/pixel-widgets-pos.json`** | Koordinat posisi widget desktop (otomatis tersimpan saat widget digeser menggunakan mouse drag). |
-| **`~/.config/quick-notes.txt`** | Isi teks catatan cepat pada widget desktop. |
-| **`~/.config/weather-config.json`** | Setelan manual koordinat cuaca (kota, latitude, longitude) jika tidak menggunakan auto-detect IP. |
+| **`~/.config/pixel-launcher-apps.json`** | List of apps pinned to the Dock (`name`, `icon`, `cmd`, `bg`, `shape`). Changes are updated on screen instantly without a restart. |
+| **`~/.config/pixel-widgets-pos.json`** | Desktop widget position coordinates (saved automatically when widgets are moved with a mouse drag). |
+| **`~/.config/quick-notes.txt`** | Text content of the quick notes desktop widget. |
+| **`~/.config/weather-config.json`** | Manual weather coordinate settings (city, latitude, longitude) when not using IP auto-detect. |
 
 ---
 
-## ⚙️ Manajemen Layanan (Systemd Services)
+## ⚙️ Service Management (Systemd Services)
 
-Seluruh komponen desktop berjalan mandiri di latar belakang di bawah kontrol `systemd --user`:
+All desktop components run independently in the background under `systemd --user` control:
 
 ```bash
-# Memeriksa status semua komponen
+# Check the status of all components
 systemctl --user status pixel-dock pixel-desktop pixel-recent-apps pixel-app-drawer
 
-# Memulai ulang dock jika baru mengubah pengaturan
+# Restart the dock after changing settings
 systemctl --user restart pixel-dock.service
 
-# Mematikan sementara
+# Temporarily stop
 systemctl --user stop pixel-dock pixel-desktop pixel-recent-apps pixel-app-drawer
 ```
 
 ---
 
-## 🗑️ Penghapusan (Uninstallation)
+## 🗑️ Uninstallation
 
-Jika ingin menghapus suite ini dan mengembalikan pintasan desktop Cinnamon ke setelan bawaan:
+To remove this suite and restore the Cinnamon desktop shortcuts to their default settings:
 ```bash
 cd ~/Applications/pixel-desktop
 ./uninstall.sh
@@ -126,5 +126,5 @@ cd ~/Applications/pixel-desktop
 
 ---
 
-## 📄 Lisensi
-Didistribusikan di bawah lisensi MIT. Silakan gunakan, modifikasi, dan bagikan secara bebas!
+## 📄 License
+Distributed under the MIT license. Feel free to use, modify, and share it!

@@ -425,7 +425,7 @@ class PixelAppDrawer(Gtk.Window):
 
         self.search_entry = Gtk.Entry()
         self.search_entry.get_style_context().add_class("search-entry")
-        self.search_entry.set_placeholder_text("Telusuri aplikasi, Google, atau tanya Gemini (?)...")
+        self.search_entry.set_placeholder_text("Search apps, Google, or ask Gemini (?)...")
         self.search_entry.set_hexpand(True)
         self.search_entry.connect("changed", self._on_search_changed)
         self.search_entry.connect("activate", self._on_search_activate)
@@ -443,7 +443,7 @@ class PixelAppDrawer(Gtk.Window):
         power_btn = Gtk.Button(label="⏻")
         power_btn.set_relief(Gtk.ReliefStyle.NONE)
         power_btn.get_style_context().add_class("power-btn")
-        power_btn.set_tooltip_text("Menu Daya (Matikan / Mulai Ulang / Kunci)")
+        power_btn.set_tooltip_text("Power Menu (Shutdown / Restart / Lock)")
         power_btn.connect("clicked", lambda b: self._on_power_clicked())
         self.search_box.pack_end(power_btn, False, False, 2)
 
@@ -460,7 +460,7 @@ class PixelAppDrawer(Gtk.Window):
         self.google_chip.set_can_focus(True)
         g_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.google_chip_icon = Gtk.Label(label="🌐")
-        self.google_chip_label = Gtk.Label(label='Telusuri Google')
+        self.google_chip_label = Gtk.Label(label='Search Google')
         self.google_chip_label.get_style_context().add_class("action-chip-label")
         self.google_chip_badge = Gtk.Label(label="↵ Enter")
         self.google_chip_badge.get_style_context().add_class("action-chip-badge")
@@ -479,7 +479,7 @@ class PixelAppDrawer(Gtk.Window):
         self.gemini_chip.set_can_focus(True)
         gm_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.gemini_chip_icon = Gtk.Label(label="✨")
-        self.gemini_chip_label = Gtk.Label(label='Tanya Gemini')
+        self.gemini_chip_label = Gtk.Label(label='Ask Gemini')
         self.gemini_chip_label.get_style_context().add_class("action-chip-label")
         self.gemini_chip_badge = Gtk.Label(label="AI")
         self.gemini_chip_badge.get_style_context().add_class("action-chip-badge")
@@ -496,8 +496,8 @@ class PixelAppDrawer(Gtk.Window):
         self.action_chips_box.set_no_show_all(True)
         self.action_chips_box.hide()
 
-        # 2. Suggested Apps Section ("Disarankan")
-        self.suggested_header = Gtk.Label(label="SERING DIGUNAKAN")
+        # 2. Suggested Apps Section ("Suggested")
+        self.suggested_header = Gtk.Label(label="FREQUENTLY USED")
         self.suggested_header.set_halign(Gtk.Align.START)
         self.suggested_header.get_style_context().add_class("section-header")
         self.root_card.pack_start(self.suggested_header, False, False, 0)
@@ -508,8 +508,8 @@ class PixelAppDrawer(Gtk.Window):
         self.suggested_box.get_style_context().add_class("suggested-box")
         self.root_card.pack_start(self.suggested_box, False, False, 0)
 
-        # 3. All Apps Section ("Semua Aplikasi")
-        self.all_apps_header = Gtk.Label(label="SEMUA APLIKASI")
+        # 3. All Apps Section ("All Apps")
+        self.all_apps_header = Gtk.Label(label="ALL APPS")
         self.all_apps_header.set_halign(Gtk.Align.START)
         self.all_apps_header.get_style_context().add_class("section-header")
         self.root_card.pack_start(self.all_apps_header, False, False, 0)
@@ -552,10 +552,10 @@ class PixelAppDrawer(Gtk.Window):
         self.no_apps_card.set_vexpand(True)
 
         no_apps_head = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        self.no_apps_title = Gtk.Label(label="Pencarian Universal (Web & AI)")
+        self.no_apps_title = Gtk.Label(label="Universal Search (Web & AI)")
         self.no_apps_title.set_halign(Gtk.Align.START)
         self.no_apps_title.get_style_context().add_class("no-apps-title")
-        self.no_apps_desc = Gtk.Label(label="Aplikasi lokal tidak ditemukan. Tekan Enter untuk mencari di Google atau tanyakan langsung ke Gemini AI.")
+        self.no_apps_desc = Gtk.Label(label="No local apps found. Press Enter to search Google or ask Gemini AI directly.")
         self.no_apps_desc.set_halign(Gtk.Align.START)
         self.no_apps_desc.set_line_wrap(True)
         self.no_apps_desc.get_style_context().add_class("no-apps-desc")
@@ -572,10 +572,10 @@ class PixelAppDrawer(Gtk.Window):
         pg_icon = Gtk.Label(label="🌐")
         pg_icon.get_style_context().add_class("action-chip-icon")
         pg_text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        self.prominent_google_title = Gtk.Label(label='Telusuri dengan Google')
+        self.prominent_google_title = Gtk.Label(label='Search with Google')
         self.prominent_google_title.set_halign(Gtk.Align.START)
         self.prominent_google_title.get_style_context().add_class("prominent-title")
-        pg_desc = Gtk.Label(label='Buka hasil web lengkap beserta rangkuman Google Gemini AI Overview')
+        pg_desc = Gtk.Label(label='Open full web results with a Google Gemini AI Overview summary')
         pg_desc.set_halign(Gtk.Align.START)
         pg_desc.get_style_context().add_class("prominent-desc")
         pg_text_box.pack_start(self.prominent_google_title, False, False, 0)
@@ -600,10 +600,10 @@ class PixelAppDrawer(Gtk.Window):
         pgm_icon = Gtk.Label(label="✨")
         pgm_icon.get_style_context().add_class("action-chip-icon")
         pgm_text_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        self.prominent_gemini_title = Gtk.Label(label='Tanya Gemini AI')
+        self.prominent_gemini_title = Gtk.Label(label='Ask Gemini AI')
         self.prominent_gemini_title.set_halign(Gtk.Align.START)
         self.prominent_gemini_title.get_style_context().add_class("prominent-title")
-        pgm_desc = Gtk.Label(label='Buka Google Gemini di browser (pertanyaan otomatis disalin ke clipboard)')
+        pgm_desc = Gtk.Label(label='Open Google Gemini in browser (question automatically copied to clipboard)')
         pgm_desc.set_halign(Gtk.Align.START)
         pgm_desc.get_style_context().add_class("prominent-desc")
         pgm_text_box.pack_start(self.prominent_gemini_title, False, False, 0)
@@ -800,10 +800,10 @@ class PixelAppDrawer(Gtk.Window):
                         break
             disp_gemini = (gemini_query[:32] + "...") if len(gemini_query) > 32 else gemini_query
 
-            self.google_chip_label.set_text(f'Telusuri Google: "{display_query}"')
-            self.gemini_chip_label.set_text(f'Tanya Gemini: "{disp_gemini}"')
-            self.prominent_google_title.set_text(f'Telusuri dengan Google: "{display_query}"')
-            self.prominent_gemini_title.set_text(f'Tanya Gemini AI: "{disp_gemini}"')
+            self.google_chip_label.set_text(f'Search Google: "{display_query}"')
+            self.gemini_chip_label.set_text(f'Ask Gemini: "{disp_gemini}"')
+            self.prominent_google_title.set_text(f'Search with Google: "{display_query}"')
+            self.prominent_gemini_title.set_text(f'Ask Gemini AI: "{disp_gemini}"')
 
             # Adjust badges depending on whether Gemini prefix was used
             if is_gemini_prefix:
@@ -823,7 +823,7 @@ class PixelAppDrawer(Gtk.Window):
             if matching_apps:
                 self.first_visible_app = matching_apps[0]["app_info"]
                 self.all_apps_header.show()
-                self.all_apps_header.set_text(f"APLIKASI COCOK ({len(matching_apps)})")
+                self.all_apps_header.set_text(f"MATCHING APPS ({len(matching_apps)})")
                 self.scrolled.show()
                 self.no_apps_card.hide()
                 self.action_chips_box.show()
@@ -839,7 +839,7 @@ class PixelAppDrawer(Gtk.Window):
             self.suggested_header.show()
             self.suggested_box.show()
             self.all_apps_header.show()
-            self.all_apps_header.set_text("SEMUA APLIKASI")
+            self.all_apps_header.set_text("ALL APPS")
             self.scrolled.show()
             self.action_chips_box.hide()
             self.no_apps_card.hide()
@@ -851,18 +851,18 @@ class PixelAppDrawer(Gtk.Window):
         if not query:
             return
 
-        # Skenario C: Explicit Gemini prefix
+        # Scenario C: Explicit Gemini prefix
         for prefix in ["?", "gemini:", "gemini ", "ai:", "ai "]:
             if query.lower().startswith(prefix):
                 self._launch_gemini(query)
                 return
 
-        # Skenario A: Local app match found -> launch first matching app
+        # Scenario A: Local app match found -> launch first matching app
         if self.first_visible_app:
             self._launch_app(self.first_visible_app)
             return
 
-        # Skenario B: No local apps found -> Default Enter opens Google Search (Pilihan A)
+        # Scenario B: No local apps found -> Default Enter opens Google Search (Option A)
         self._launch_google_search(query)
 
     def _launch_google_search(self, query):
@@ -910,8 +910,8 @@ class PixelAppDrawer(Gtk.Window):
                 "notify-send",
                 "-a", "Google Gemini",
                 "-i", "google-chrome",
-                "Membuka Google Gemini",
-                f"Pertanyaan disalin ke clipboard:\n\"{preview}\""
+                "Opening Google Gemini",
+                f"Question copied to clipboard:\n\"{preview}\""
             ])
         except Exception:
             pass

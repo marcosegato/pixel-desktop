@@ -71,8 +71,8 @@ class WindowItem:
     def __init__(self, wnck_win, gdk_disp):
         self.wnck_win = wnck_win
         self.xid = wnck_win.get_xid()
-        self.title = wnck_win.get_name() or "Aplikasi"
-        self.app_name = wnck_win.get_class_group_name() or wnck_win.get_class_instance_name() or "Aplikasi"
+        self.title = wnck_win.get_name() or "App"
+        self.app_name = wnck_win.get_class_group_name() or wnck_win.get_class_instance_name() or "App"
         self.icon_pixbuf = None
         self.preview_pixbuf = None
         self.is_active = wnck_win.is_active()
@@ -364,7 +364,7 @@ class PixelRecentApps(Gtk.Window):
         else:
             self._draw_cards(cr, is_dark)
 
-        # 4. Bottom Floating Action Pill ("Clear All / Tutup Semua")
+        # 4. Bottom Floating Action Pill ("Clear All")
         self._draw_bottom_bar(cr, is_dark)
 
         return False
@@ -373,9 +373,9 @@ class PixelRecentApps(Gtk.Window):
         sw = self.screen_w
         y = 28
 
-        # Left Badge: "Aplikasi Terbuka"
+        # Left Badge: "Open Applications"
         title_x = 48
-        layout_t = self.create_pango_layout("Aplikasi Terbuka")
+        layout_t = self.create_pango_layout("Open Applications")
         layout_t.set_font_description(Pango.FontDescription("Google Sans Bold 16"))
         if is_dark:
             cr.set_source_rgba(0.93, 0.88, 0.86, 0.95)
@@ -386,7 +386,7 @@ class PixelRecentApps(Gtk.Window):
 
         # Right Telemetry Pill: RAM Usage
         used_gb, total_gb, avail_gb = get_ram_info()
-        ram_text = f"Memori: {used_gb:.1f} GB / {total_gb:.1f} GB ({avail_gb:.1f} GB Kosong)"
+        ram_text = f"Memory: {used_gb:.1f} GB / {total_gb:.1f} GB ({avail_gb:.1f} GB free)"
 
         layout_r = self.create_pango_layout(ram_text)
         layout_r.set_font_description(Pango.FontDescription("Google Sans Medium 11.5"))
@@ -424,11 +424,11 @@ class PixelRecentApps(Gtk.Window):
             cr.set_source_rgba(0.96, 0.93, 0.91, 0.95)
         cr.fill()
 
-        l1 = self.create_pango_layout("Tidak Ada Aplikasi Terbuka")
+        l1 = self.create_pango_layout("No Open Applications")
         l1.set_font_description(Pango.FontDescription("Google Sans Bold 17"))
         _, r1 = l1.get_pixel_extents()
 
-        l2 = self.create_pango_layout("Semua jendela aplikasi sedang ditutup • Tekan Esc untuk kembali")
+        l2 = self.create_pango_layout("All app windows are closed • Press Esc to go back")
         l2.set_font_description(Pango.FontDescription("Google Sans Medium 12"))
         _, r2 = l2.get_pixel_extents()
 
@@ -704,7 +704,7 @@ class PixelRecentApps(Gtk.Window):
         cr.restore()
 
         # Subtitle below button
-        lbl = self.create_pango_layout("Tutup Semua")
+        lbl = self.create_pango_layout("Close All")
         lbl.set_font_description(Pango.FontDescription("Google Sans Medium 10.5"))
         _, l_rect = lbl.get_pixel_extents()
         if is_dark:

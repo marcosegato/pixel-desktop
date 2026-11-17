@@ -14,9 +14,9 @@ Features:
 - Dynamic App Badges: Pinned apps + Running Unpinned Apps with running dot indicators (•)
 - Single-Click Restore/Unminimize: If an app is running/minimized, left-clicking restores and focuses its window (never opens duplicate windows)
 - Right-Click Material 3 Context Menu:
-  * Application Profiles / Desktop Actions (e.g. WhatsApp Kantor/Admin/Pribadi/All, Chrome New Window/Incognito)
-  * "📌 Simpan di Dock" (Keep in Dock) / "📌 Lepas dari Dock" (Remove from Dock)
-  * "✕ Tutup Jendela" (Close Window)
+  * Application Profiles / Desktop Actions (e.g. WhatsApp Work/Admin/Personal/All, Chrome New Window/Incognito)
+  * "📌 Keep in Dock" / "📌 Remove from Dock"
+  * "✕ Close Window"
 - Dynamic Width Expansion/Contraction as apps open and close
 - Smooth 60fps spring/ease animations, 0.0% CPU when stationary
 """
@@ -723,7 +723,7 @@ class PixelDock(Gtk.Window):
                 self.hover_title = "Recent Apps"
             elif 110 <= rx <= 295:
                 self.hover_candidate = "search"
-                self.hover_title = "Telusuri Google atau Gemini"
+                self.hover_title = "Search Google or Gemini"
             elif rx >= 309:
                 idx = int((rx - 309) // 52)
                 if 0 <= idx < len(self.all_dock_items):
@@ -981,79 +981,79 @@ class PixelDock(Gtk.Window):
         wh_base = os.path.expanduser("~/Applications/whatsapp-pwa")
         if ("whatsapp" in name.lower() or "whatsapp" in cmd.lower()) and os.path.exists(os.path.join(wh_base, "launch-kantor.sh")):
             # WhatsApp 3-Profile Menu
-            item_k = Gtk.MenuItem(label="🟢  WhatsApp - Kantor")
+            item_k = Gtk.MenuItem(label="🟢  WhatsApp - Work")
             item_k.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, "launch-kantor.sh")], start_new_session=True))
             menu.append(item_k)
 
-            item_a = Gtk.MenuItem(label="🟠  WhatsApp - AdminTeknik")
+            item_a = Gtk.MenuItem(label="🟠  WhatsApp - AdminTech")
             item_a.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, "launch-adminteknik.sh")], start_new_session=True))
             menu.append(item_a)
 
-            item_p = Gtk.MenuItem(label="🟣  WhatsApp - Pribadi")
+            item_p = Gtk.MenuItem(label="🟣  WhatsApp - Personal")
             item_p.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, "launch-pribadi.sh")], start_new_session=True))
             menu.append(item_p)
 
-            item_all = Gtk.MenuItem(label="🚀  Buka Semua 3 Profil Sekaligus")
+            item_all = Gtk.MenuItem(label="🚀  Open All 3 Profiles at Once")
             item_all.connect("activate", lambda w: subprocess.Popen([os.path.join(wh_base, "launch-all.sh")], start_new_session=True))
             menu.append(item_all)
 
         elif "youtube" in name.lower() or "music" in name.lower():
-            item_play = Gtk.MenuItem(label="⏯️  Putar / Jeda")
+            item_play = Gtk.MenuItem(label="⏯️  Play / Pause")
             item_play.connect("activate", lambda w: self._send_mpris("PlayPause"))
             menu.append(item_play)
 
-            item_next = Gtk.MenuItem(label="⏭️  Lagu Berikutnya")
+            item_next = Gtk.MenuItem(label="⏭️  Next Song")
             item_next.connect("activate", lambda w: self._send_mpris("Next"))
             menu.append(item_next)
 
-            item_prev = Gtk.MenuItem(label="⏮️  Lagu Sebelumnya")
+            item_prev = Gtk.MenuItem(label="⏮️  Previous Song")
             item_prev.connect("activate", lambda w: self._send_mpris("Previous"))
             menu.append(item_prev)
 
             if not running_xids:
-                item_open = Gtk.MenuItem(label="🔴  Buka YouTube Music")
+                item_open = Gtk.MenuItem(label="🔴  Open YouTube Music")
                 item_open.connect("activate", lambda w, a=app: self.launch_app(a))
                 menu.append(item_open)
 
         elif "chrome" in name.lower() or "chrome" in cmd.lower():
-            item_nw = Gtk.MenuItem(label="🌐  Jendela Baru")
+            item_nw = Gtk.MenuItem(label="🌐  New Window")
             item_nw.connect("activate", lambda w: subprocess.Popen(["google-chrome", "--new-window"], start_new_session=True))
             menu.append(item_nw)
 
-            item_incog = Gtk.MenuItem(label="🕶️  Jendela Penyamaran Baru")
+            item_incog = Gtk.MenuItem(label="🕶️  New Incognito Window")
             item_incog.connect("activate", lambda w: subprocess.Popen(["google-chrome", "--incognito"], start_new_session=True))
             menu.append(item_incog)
 
         elif "nemo" in cmd.lower() or "files" in name.lower():
-            item_nw = Gtk.MenuItem(label="📁  Jendela Berkas Baru")
+            item_nw = Gtk.MenuItem(label="📁  New File Window")
             item_nw.connect("activate", lambda w: subprocess.Popen(["nemo"], start_new_session=True))
             menu.append(item_nw)
 
-            item_home = Gtk.MenuItem(label="🏠  Folder Home")
+            item_home = Gtk.MenuItem(label="🏠  Home Folder")
             item_home.connect("activate", lambda w: subprocess.Popen(["nemo", os.path.expanduser("~")], start_new_session=True))
             menu.append(item_home)
 
-            item_dl = Gtk.MenuItem(label="📥  Folder Unduhan")
+            item_dl = Gtk.MenuItem(label="📥  Downloads Folder")
             item_dl.connect("activate", lambda w: subprocess.Popen(["nemo", os.path.expanduser("~/Downloads")], start_new_session=True))
             menu.append(item_dl)
 
         elif "terminal" in name.lower() or "terminal" in cmd.lower():
-            item_t = Gtk.MenuItem(label="💻  Buka Terminal Baru")
+            item_t = Gtk.MenuItem(label="💻  Open New Terminal")
             item_t.connect("activate", lambda w: subprocess.Popen(["gnome-terminal"], start_new_session=True))
             menu.append(item_t)
 
         elif "settings" in name.lower():
-            item_s = Gtk.MenuItem(label="⚙️  Pengaturan Sistem")
+            item_s = Gtk.MenuItem(label="⚙️  System Settings")
             item_s.connect("activate", lambda w: subprocess.Popen(["cinnamon-settings"], start_new_session=True))
             menu.append(item_s)
 
         elif "telegram" in name.lower():
-            item_t = Gtk.MenuItem(label="✈️  Buka Telegram")
+            item_t = Gtk.MenuItem(label="✈️  Open Telegram")
             item_t.connect("activate", lambda w, a=app: self.launch_app(a))
             menu.append(item_t)
 
         elif "notes" in name.lower() or "xed" in cmd.lower():
-            item_n = Gtk.MenuItem(label="📝  Buka Catatan Cepat")
+            item_n = Gtk.MenuItem(label="📝  Open Quick Notes")
             item_n.connect("activate", lambda w: subprocess.Popen(["xed", os.path.expanduser("~/.config/quick-notes.txt")], start_new_session=True))
             menu.append(item_n)
 
@@ -1083,17 +1083,17 @@ class PixelDock(Gtk.Window):
 
         # 2. Pin / Unpin Action ("Keep in Dock")
         if is_pinned:
-            item_pin = Gtk.MenuItem(label="📌  Lepas dari Dock")
+            item_pin = Gtk.MenuItem(label="📌  Remove from Dock")
             item_pin.connect("activate", lambda w, a=app: self.unpin_app(a))
             menu.append(item_pin)
         else:
-            item_pin = Gtk.MenuItem(label="📌  Simpan di Dock")
+            item_pin = Gtk.MenuItem(label="📌  Keep in Dock")
             item_pin.connect("activate", lambda w, a=app: self.pin_app(a))
             menu.append(item_pin)
 
         # 3. Close Window Action (if running)
         if running_xids:
-            item_close = Gtk.MenuItem(label="✕  Tutup Jendela")
+            item_close = Gtk.MenuItem(label="✕  Close Window")
             item_close.connect("activate", lambda w, xids=running_xids: self.close_app_windows(xids))
             menu.append(item_close)
 
@@ -1335,7 +1335,7 @@ class PixelDock(Gtk.Window):
         # Search placeholder text
         layout_txt = PangoCairo.create_layout(cr)
         txt_col = "#EDE0DC" if self.is_dark_mode else "#53433F"
-        layout_txt.set_markup(f'<span foreground="{txt_col}" font_family="Google Sans" font_size="9.5pt">Telusuri...</span>')
+        layout_txt.set_markup(f'<span foreground="{txt_col}" font_family="Google Sans" font_size="9.5pt">Search...</span>')
         cr.move_to(pill_x + 36, pill_y + 11)
         PangoCairo.show_layout(cr, layout_txt)
 
