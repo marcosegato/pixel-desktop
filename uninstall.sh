@@ -41,4 +41,11 @@ if command -v gsettings >/dev/null 2>&1; then
     fi
 fi
 
+echo "Removing the custom desktop background..."
+if command -v gsettings >/dev/null 2>&1; then
+    gsettings reset org.gnome.desktop.background picture-uri 2>/dev/null || true
+    gsettings reset org.gnome.desktop.background picture-uri-dark 2>/dev/null || true
+    gsettings reset org.gnome.desktop.background picture-options 2>/dev/null || true
+fi
+
 echo "✓ Uninstallation complete. The desktop has been restored to its default settings."

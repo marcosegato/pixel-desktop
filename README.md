@@ -69,6 +69,7 @@
 The installer script will automatically:
 * Check and install system dependency packages (`python3-gi`, `gir1.2-wnck-3.0`, `python3-xlib`, `wmctrl`, etc.).
 * Install the official *Google Sans* fonts to `~/.local/share/fonts/`.
+* Set `assets/pixel-peach-clay-discs-1080p.jpg` as the desktop background.
 * Register and enable 4 `systemd --user` background services, pointing at the directory you cloned to.
 * Configure the desktop environment's `Alt+Tab` shortcut to the Pixel Recent Apps Switcher (GNOME/GTK-based desktops).
 
@@ -174,7 +175,7 @@ If a change still does not appear after restarting:
 
 ## 🗑️ Uninstallation
 
-To remove this suite and restore the desktop environment's shortcuts to their default settings:
+To remove this suite and restore the desktop environment's shortcuts and background to their default settings:
 ```bash
 cd /path/to/pixel-desktop   # the directory you cloned to
 ./uninstall.sh

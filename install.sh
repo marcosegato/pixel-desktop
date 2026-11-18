@@ -31,7 +31,7 @@ echo "  ╚═══════════════════════
 echo -e "${C_RESET}"
 
 # 1. Package Dependencies Check
-echo -e "${C_BOLD}${C_BLUE}[1/5] Checking system dependencies...${C_RESET}"
+echo -e "${C_BOLD}${C_BLUE}[1/6] Checking system dependencies...${C_RESET}"
 REQUIRED_PKGS=(
     python3
     python3-gi
@@ -69,7 +69,7 @@ else
 fi
 
 # 2. Font Installation
-echo -e "\n${C_BOLD}${C_BLUE}[2/5] Checking Google Sans fonts...${C_RESET}"
+echo -e "\n${C_BOLD}${C_BLUE}[2/6] Checking Google Sans fonts...${C_RESET}"
 FONT_DIR="$HOME/.local/share/fonts/GoogleSans"
 if ! fc-list : family | grep -qi "Google Sans"; then
     echo "Installing Google Sans fonts to $FONT_DIR..."
@@ -86,7 +86,7 @@ else
 fi
 
 # 3. Default Configuration & Scratchpad
-echo -e "\n${C_BOLD}${C_BLUE}[3/5] Checking initial configuration...${C_RESET}"
+echo -e "\n${C_BOLD}${C_BLUE}[3/6] Checking initial configuration...${C_RESET}"
 mkdir -p "$HOME/.config"
 if [ ! -f "$HOME/.config/quick-notes.txt" ]; then
     cat << 'EOF' > "$HOME/.config/quick-notes.txt"
@@ -99,7 +99,7 @@ EOF
 fi
 
 # 4. Systemd User Services Installation
-echo -e "\n${C_BOLD}${C_BLUE}[4/5] Installing systemd user background services...${C_RESET}"
+echo -e "\n${C_BOLD}${C_BLUE}[4/6] Installing systemd user background services...${C_RESET}"
 SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
 mkdir -p "$SYSTEMD_USER_DIR"
 
@@ -125,7 +125,7 @@ systemctl --user enable --now "${SERVICES[@]}"
 echo -e "${C_GREEN}✓ All 4 Pixel Desktop services are active and running.${C_RESET}"
 
 # 5. Alt+Tab Keybindings (GTK/GNOME-based desktops)
-echo -e "\n${C_BOLD}${C_BLUE}[5/5] Configuring Alt+Tab shortcuts...${C_RESET}"
+echo -e "\n${C_BOLD}${C_BLUE}[5/6] Configuring Alt+Tab shortcuts...${C_RESET}"
 if command -v gsettings >/dev/null 2>&1; then
     # GNOME / GTK path (settings-daemon media-keys custom keybindings)
     MEDIA_KEYS="org.gnome.settings-daemon.plugins.media-keys"
@@ -159,6 +159,24 @@ if command -v gsettings >/dev/null 2>&1; then
     gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH2" binding "['<Shift><Alt>Tab', '<Shift><Super>Tab']"
     gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH2" command "$SCRIPT_DIR/pixel_recent_apps.py prev"
     echo -e "${C_GREEN}✓ Alt+Tab and Super+Tab shortcuts wired to the Pixel Switcher (GNOME/GTK).${C_RESET}"
+fi
+
+# 6. Desktop Background
+echo -e "\n${C_BOLD}${C_BLUE}[6/6] Setting desktop background...${C_RESET}"
+BG_IMAGE="$SCRIPT_DIR/assets/pixel-peach-clay-discs-1080p.jpg"
+if [ ! -f "$BG_IMAGE" ]; then
+    echo -e "${C_YELLOW}assets/pixel-peach-clay-discs-1080p.jpg not found, skipping desktop background.${C_RESET}"
+elif command -v gsettings >/dev/null 2>&1; then
+    if gsettings set org.gnome.desktop.background picture-uri "file://$BG_IMAGE" 2>/dev/null; then
+        # Dark-mode variant (GNOME 42+) and fill mode; ignore if unsupported
+        gsettings set org.gnome.desktop.background picture-uri-dark "file://$BG_IMAGE" 2>/dev/null || true
+        gsettings set org.gnome.desktop.background picture-options "zoom" 2>/dev/null || true
+        echo -e "${C_GREEN}✓ Desktop background set to assets/pixel-peach-clay-discs-1080p.jpg.${C_RESET}"
+    else
+        echo -e "${C_YELLOW}Could not set the desktop background (schema not available), skipping.${C_RESET}"
+    fi
+else
+    echo -e "${C_YELLOW}gsettings not found, skipping desktop background setup.${C_RESET}"
 fi
 
 echo -e "\n${C_BOLD}${C_GREEN}══════════════════════════════════════════════════════════════════════${C_RESET}"
