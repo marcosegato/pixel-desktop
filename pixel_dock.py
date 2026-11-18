@@ -1519,6 +1519,16 @@ class PixelDock(Gtk.Window):
 
 
 def main():
+    global SCREEN_WIDTH, SCREEN_HEIGHT, SHOWN_Y, HIDDEN_Y
+
+    # Use the real screen size instead of the 1920x1080 fallback
+    screen = Gdk.Screen.get_default()
+    if screen:
+        SCREEN_WIDTH = screen.get_width()
+        SCREEN_HEIGHT = screen.get_height()
+        SHOWN_Y = SCREEN_HEIGHT - WINDOW_H
+        HIDDEN_Y = SCREEN_HEIGHT + 15
+
     dock = PixelDock()
     dock.show_all()
     Gtk.main()

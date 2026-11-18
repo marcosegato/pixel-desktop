@@ -41,6 +41,7 @@
   * Quick Folder Launchers (*Downloads, Documents, Pictures, Music*).
   * Interactive Control Center with a live volume slider and shortcut buttons (Dark Mode, Wi-Fi, Bluetooth).
   * Quick Notes with an automatic file watcher (*live watcher* on `~/.config/quick-notes.txt`).
+* **Resolution-Independent Layout**: Widget and dock positions are computed from the actual screen size at startup (e.g. 1920x1080 or 1366x768), so nothing is placed off-screen. Layouts saved on a different resolution are discarded automatically.
 * **Input Shape Click-Through**: Transparent click-through areas to the wallpaper without blocking the desktop.
 * **0.0% Idle CPU**: No active polling loops. Uses DBus UPower, DBus MPRIS, and a minute-boundary tick.
 
@@ -94,7 +95,7 @@ All configuration files are stored neatly in standard JSON / text format in `~/.
 | Configuration File | Description |
 | :--- | :--- |
 | **`~/.config/pixel-launcher-apps.json`** | List of apps pinned to the Dock (`name`, `icon`, `cmd`, `bg`, `shape`). Changes are updated on screen instantly without a restart. |
-| **`~/.config/pixel-widgets-pos.json`** | Desktop widget position coordinates (saved automatically when widgets are moved with a mouse drag). |
+| **`~/.config/pixel-widgets-pos.json`** | Desktop widget position coordinates (saved automatically when widgets are moved with a mouse drag). The file records the screen resolution; if the resolution changes, the default layout is regenerated instead of applying stale coordinates. |
 | **`~/.config/quick-notes.txt`** | Text content of the quick notes desktop widget. |
 | **`~/.config/weather-config.json`** | Weather location settings. With `"auto_location": true` (default) the city is detected via IP geolocation; if detection fails, Rome (Italy) is used. Set `"auto_location": false` plus `manual_city`, `manual_lat`, `manual_lon` to pin a location. |
 | **`~/.config/pixel-desktop.json`** | Optional overrides for companion-app locations (see below). |

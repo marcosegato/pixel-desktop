@@ -50,7 +50,7 @@ try:
 except Exception:
     pass
 
-# Screen Dimensions
+# Screen Dimensions (overridden at startup with the real screen size in main())
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 
@@ -65,16 +65,29 @@ CONTROL_W = 330
 CONTROL_H = 280
 DOCK_H = 60
 
-DEFAULT_POSITIONS = {
-    "clock": [65, 50],
-    "weather_battery": [65, 165],
-    "music": [65, 560],
-    "calendar": [65, 665],
-    "date_notes": [1525, 50],
-    "quick_pills": [1525, 225],
-    "control_center": [1525, 390],
-    "dock": [None, 995]
-}
+
+def default_positions():
+    """Default widget layout, anchored to the actual screen size.
+
+    Right column and bottom row are computed from SCREEN_WIDTH/SCREEN_HEIGHT
+    so the layout fits any resolution (1920x1080, 1366x768, ...).
+    """
+    right_x = max(0, SCREEN_WIDTH - DATE_NOTES_W - 65)
+    bottom_margin = max(90, int(SCREEN_HEIGHT * 0.19))
+    calendar_y = max(0, SCREEN_HEIGHT - bottom_margin - CALENDAR_H)
+    music_y = max(0, calendar_y - 19 - MUSIC_H)
+    control_y = min(390, max(0, SCREEN_HEIGHT - CONTROL_H - 100))
+    dock_y = max(0, SCREEN_HEIGHT - DOCK_H - 25)
+    return {
+        "clock": [65, 50],
+        "weather_battery": [65, 165],
+        "music": [65, music_y],
+        "calendar": [65, calendar_y],
+        "date_notes": [right_x, 50],
+        "quick_pills": [right_x, 225],
+        "control_center": [right_x, control_y],
+        "dock": [None, dock_y]
+    }
 
 WIDGET_SIZES = {
     "clock": (260, 105),
@@ -147,22 +160,49 @@ class MaterialYouDesktop(Gtk.Window):
     def dock_y(self): return self.pos["dock"][1]
 
     def load_positions(self):
-        self.pos = {k: list(v) for k, v in DEFAULT_POSITIONS.items()}
+        self.pos = {k: list(v) for k, v in default_positions().items()}
         if os.path.exists(WIDGET_POSITIONS_FILE):
             try:
                 with open(WIDGET_POSITIONS_FILE, "r", encoding="utf-8") as f:
                     saved = json.load(f)
+                # Files written before the dynamic layout have no "_screen"
+                # marker: their coordinates were authored for 1920x1080.
+                saved_screen = saved.get("_screen") or [1920, 1080]
+                if saved_screen and list(saved_screen) != [SCREEN_WIDTH, SCREEN_HEIGHT]:
+                    print("[MaterialYou] Saved layout belongs to a different "
+                          f"resolution ({saved_screen}); using defaults for "
+                          f"{SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+                else:
                     for k, v in saved.items():
                         if k in self.pos and isinstance(v, list) and len(v) == 2:
                             self.pos[k] = v
             except Exception as e:
                 print(f"[MaterialYou] Error loading widget positions: {e}")
+        self.sanitize_positions()
+
+    def sanitize_positions(self):
+        """Clamp every widget fully on screen (handles stale configs and
+        positions saved on a different resolution)."""
+        for name, (w, h) in WIDGET_SIZES.items():
+            if name not in self.pos:
+                continue
+            x, y = self.pos[name]
+            if name == "dock":
+                if x is not None:
+                    x = max(0, min(max(0, SCREEN_WIDTH - getattr(self, "dock_w", 700)), int(x)))
+                y = max(0, min(max(0, SCREEN_HEIGHT - h), int(y)))
+            else:
+                x = max(0, min(max(0, SCREEN_WIDTH - w), int(x)))
+                y = max(0, min(max(0, SCREEN_HEIGHT - h), int(y)))
+            self.pos[name] = [x, y]
 
     def save_positions(self):
         try:
             os.makedirs(os.path.dirname(WIDGET_POSITIONS_FILE), exist_ok=True)
+            data = {"_screen": [SCREEN_WIDTH, SCREEN_HEIGHT]}
+            data.update(self.pos)
             with open(WIDGET_POSITIONS_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.pos, f, indent=2)
+                json.dump(data, f, indent=2)
         except Exception as e:
             print(f"[MaterialYou] Error saving widget positions: {e}")
 
@@ -420,6 +460,7 @@ class MaterialYouDesktop(Gtk.Window):
         # App drawer (40) + Recent apps (40) + Search pill (185) + Apps (40 each with 12 gap), padding 12 each side
         num_apps = len(self.launcher_apps)
         self.dock_w = 305 + (num_apps * 52)
+        self.sanitize_positions()
         if self.pos.get("dock", [None])[0] is not None:
             self.dock_x = self.pos["dock"][0]
         else:
@@ -2198,8 +2239,15 @@ class MaterialYouDesktop(Gtk.Window):
 
 
 def main():
+    global SCREEN_WIDTH, SCREEN_HEIGHT
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     signal.signal(signal.SIGTERM, lambda s, f: Gtk.main_quit())
+
+    # Use the real screen size instead of the 1920x1080 fallback
+    screen = Gdk.Screen.get_default()
+    if screen:
+        SCREEN_WIDTH = screen.get_width()
+        SCREEN_HEIGHT = screen.get_height()
 
     win = MaterialYouDesktop()
     win.show_all()
