@@ -36,7 +36,7 @@
 * **Native Google Pixel Widgets**:
   * Large Digital Clock & Calendar with *Google Sans* typography.
   * Real-Time Open-Meteo Weather with automatic location detection via IP geolocation (falls back to Rome, Italy).
-  * ThinkPad Temperature & Battery Telemetry.
+  * Battery & CPU Temperature Telemetry (UPower + hwmon).
   * MPRIS Music Player with a moving audio wave bar (*squiggly progress wave*).
   * Quick Folder Launchers (*Downloads, Documents, Pictures, Music*).
   * Interactive Control Center with a live volume slider and shortcut buttons (Dark Mode, Wi-Fi, Bluetooth).

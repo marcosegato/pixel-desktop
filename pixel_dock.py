@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Pixel Dock - Native Google Pixel Material You Floating Auto-Hide Dock (Plank Replacement)
-ThinkPad X1 Carbon Gen 6 (Enterprise Tier 1)
+Generic GTK/GNOME desktop environments (laptops and desktops)
 
 Features:
 - Material Design 3 Floating Dock Surface with Monet tonal container elevation
@@ -980,7 +980,7 @@ class PixelDock(Gtk.Window):
         except Exception:
             pass
 
-        # 2. Fallback to hardware multimedia key simulation (ThinkPad keycodes)
+        # 2. Fallback to hardware multimedia key simulation (standard XF86 keycodes)
         key_codes = {
             "PlayPause": 172,  # XF86AudioPlay
             "Next": 171,       # XF86AudioNext

@@ -2,11 +2,11 @@
 """
 Material You (MD3) Pastel Desktop Environment for Debian-based Linux
 (GTK/GNOME-based desktop environments).
-Designed for ThinkPad X1 Carbon Gen 6.
+Runs on any laptop or desktop with a GTK/GNOME-based session.
 - 100% REAL & FULLY FUNCTIONAL WIDGETS (Not mockups!):
   * Live Clock & Calendar (opens calendar settings)
   * Real Open-Meteo Weather with IP geolocation (Rome fallback, opens forecast)
-  * Real ThinkPad Battery & Thermal telemetry (opens power settings)
+  * Generic Battery & CPU Thermal Telemetry (UPower + hwmon, opens power settings)
   * Real MPRIS Music Controller with Play/Pause/Skip & live metadata
   * Real Quick Folder Launchers (Downloads, Documents, Pictures, Music via Nemo)
   * Real Control Center with interactive live Volume slider & Quick Toggles
@@ -104,6 +104,103 @@ WIDGET_POSITIONS_FILE = pixel_common.config_path("pixel-widgets-pos.json")
 
 NOTES_FILE = pixel_common.config_path("quick-notes.txt")
 LAUNCHER_CONFIG_FILE = pixel_common.config_path("pixel-launcher-apps.json")
+
+# UPower exposes an aggregate "DisplayDevice" that matches the GNOME top bar
+# (handles BAT0/BAT1 naming and multiple batteries transparently).
+UPOWER_DISPLAY_DEVICE = "/org/freedesktop/UPower/devices/DisplayDevice"
+
+
+def find_battery_sysfs():
+    """Return the sysfs directories of all system batteries.
+
+    The kernel does not guarantee the BAT0 name, so probes every power
+    supply whose ``type`` is ``Battery`` and exposes a ``capacity`` file.
+    """
+    base = "/sys/class/power_supply"
+    try:
+        entries = sorted(os.listdir(base))
+    except OSError:
+        return []
+    # Prefer conventional BAT* names, then any other battery-like device.
+    ordered = [e for e in entries if e.startswith("BAT")]
+    ordered += [e for e in entries if not e.startswith("BAT")]
+    found = []
+    for name in ordered:
+        path = os.path.join(base, name)
+        try:
+            with open(os.path.join(path, "type"), "r") as f:
+                if f.read().strip().lower() != "battery":
+                    continue
+            if os.path.exists(os.path.join(path, "capacity")):
+                found.append(path)
+        except OSError:
+            continue
+    return found
+
+
+def _read_int_file(path):
+    """Read a single integer from a sysfs/procfs file, or None."""
+    try:
+        with open(path, "r") as f:
+            return int(f.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _hwmon_dirs():
+    base = "/sys/class/hwmon"
+    try:
+        return [os.path.join(base, e) for e in sorted(os.listdir(base))]
+    except OSError:
+        return []
+
+
+def read_cpu_temp():
+    """Return the CPU temperature in °C, or None when no sensor exists.
+
+    Reads the generic Linux hwmon interface: coretemp/k10temp (CPU) first,
+    then acpitz, then any other thermal sensor exposed by the kernel.
+    """
+    by_chip = {}
+    for hw in _hwmon_dirs():
+        try:
+            with open(os.path.join(hw, "name"), "r") as f:
+                chip = f.read().strip()
+        except OSError:
+            continue
+        temps = []
+        try:
+            entries = os.listdir(hw)
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.startswith("temp") and entry.endswith("_input"):
+                millideg = _read_int_file(os.path.join(hw, entry))
+                if millideg is not None:
+                    temps.append(millideg // 1000)
+        if temps:
+            by_chip[chip] = temps
+
+    for chip in ("coretemp", "k10temp", "zenpower", "acpitz"):
+        if by_chip.get(chip):
+            return max(by_chip[chip])
+    all_temps = [t for temps in by_chip.values() for t in temps]
+    return max(all_temps) if all_temps else None
+
+
+def read_fan_rpm():
+    """Return the fan speed in RPM, or None when no tachometer is exposed."""
+    for hw in _hwmon_dirs():
+        try:
+            entries = os.listdir(hw)
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.startswith("fan") and entry.endswith("_input"):
+                rpm = _read_int_file(os.path.join(hw, entry))
+                if rpm is not None:
+                    return rpm
+    return None
 
 
 def hex_to_rgb(hex_str, default=(0.90, 0.90, 0.95)):
@@ -255,10 +352,10 @@ class MaterialYouDesktop(Gtk.Window):
         self.day_str = str(now.day)
         self.weekday_str = now.strftime("%A, %-d %b")
 
-        self.battery_pct = 79
+        self.battery_pct = 0
         self.battery_state = 5  # 1=charging, 2=discharging, 4=full
-        self.cpu_temp = 50
-        self.fan_rpm = 0
+        self.cpu_temp = None
+        self.fan_rpm = None
         self.volume_level = 50
         self.is_muted = False
         self.is_dragging_slider = False
@@ -469,9 +566,9 @@ class MaterialYouDesktop(Gtk.Window):
     def load_quick_notes(self):
         if not os.path.exists(NOTES_FILE):
             default_content = (
-                "• Check ThinkPad power & battery efficiency\n"
-                "• Monitor WhatsMulti sticker stability\n"
-                "• Target silent 0 RPM fan & cool temps\n"
+                "• Check laptop power & battery efficiency\n"
+                "• Monitor system temperatures & battery health\n"
+                "• Keep the system cool and responsive\n"
             )
             try:
                 os.makedirs(os.path.dirname(NOTES_FILE), exist_ok=True)
@@ -557,7 +654,7 @@ class MaterialYouDesktop(Gtk.Window):
                 "org.freedesktop.UPower",
                 "org.freedesktop.DBus.Properties",
                 "PropertiesChanged",
-                "/org/freedesktop/UPower/devices/battery_BAT0",
+                UPOWER_DISPLAY_DEVICE,
                 None,
                 Gio.DBusSignalFlags.NONE,
                 self.on_upower_changed,
@@ -566,7 +663,7 @@ class MaterialYouDesktop(Gtk.Window):
             upower = Gio.DBusProxy.new_sync(
                 sys_bus, Gio.DBusProxyFlags.NONE, None,
                 "org.freedesktop.UPower",
-                "/org/freedesktop/UPower/devices/battery_BAT0",
+                UPOWER_DISPLAY_DEVICE,
                 "org.freedesktop.UPower.Device",
                 None
             )
@@ -731,37 +828,30 @@ class MaterialYouDesktop(Gtk.Window):
             self.is_muted = False
 
     def update_hardware_stats(self):
-        try:
-            with open("/proc/acpi/ibm/thermal", "r") as f:
-                self.cpu_temp = int(f.readline().split()[1])
-        except Exception:
-            self.cpu_temp = 50
+        self.cpu_temp = read_cpu_temp()
+        self.fan_rpm = read_fan_rpm()
 
-        try:
-            with open("/proc/acpi/ibm/fan", "r") as f:
-                for line in f:
-                    if line.startswith("speed:"):
-                        self.fan_rpm = int(line.split()[1])
-                        break
-        except Exception:
-            self.fan_rpm = 0
-
-        # Direct sysfs battery read (100% synchronized with kernel & top panel)
-        try:
-            with open("/sys/class/power_supply/BAT0/capacity", "r") as f:
-                self.battery_pct = int(f.read().strip())
-            with open("/sys/class/power_supply/BAT0/status", "r") as f:
-                st = f.read().strip().lower()
-                if st == "charging":
-                    self.battery_state = 1
-                elif st == "full":
-                    self.battery_state = 4
-                elif st == "discharging":
-                    self.battery_state = 2
-                else:
-                    self.battery_state = 5
-        except Exception:
-            pass
+        # Direct sysfs battery read (synchronized with kernel & GNOME top bar).
+        # With a single battery we can read it directly; with multiple
+        # batteries we keep the UPower DisplayDevice aggregate.
+        bat_paths = find_battery_sysfs()
+        if len(bat_paths) == 1:
+            bat_path = bat_paths[0]
+            try:
+                with open(os.path.join(bat_path, "capacity"), "r") as f:
+                    self.battery_pct = int(f.read().strip())
+                with open(os.path.join(bat_path, "status"), "r") as f:
+                    st = f.read().strip().lower()
+                    if st == "charging":
+                        self.battery_state = 1
+                    elif st == "full":
+                        self.battery_state = 4
+                    elif st == "discharging":
+                        self.battery_state = 2
+                    else:
+                        self.battery_state = 5
+            except Exception:
+                pass
 
     def is_desktop_obscured(self):
         """
@@ -1152,8 +1242,14 @@ class MaterialYouDesktop(Gtk.Window):
             cr.fill()
             state_fg = (0.24, 0.12, 0.08, 0.98) # On-Primary Container #381E16
 
-        fan_str = f"{self.fan_rpm}RPM" if self.fan_rpm > 0 else "0RPM"
-        state_str = f"{self.cpu_temp}°C {fan_str}"
+        temp_str = f"{self.cpu_temp}°C" if self.cpu_temp is not None else "N/A"
+        if self.fan_rpm is None:
+            fan_str = "N/A"          # no fan tachometer exposed by this machine
+        elif self.fan_rpm > 0:
+            fan_str = f"{self.fan_rpm}RPM"
+        else:
+            fan_str = "0RPM"         # real reading: fan stopped
+        state_str = f"{temp_str} {fan_str}"
         l_st = self.create_pango_layout(state_str)
         l_st.set_font_description(Pango.FontDescription("Google Sans Bold 8"))
         _, st_rect = l_st.get_pixel_extents()
