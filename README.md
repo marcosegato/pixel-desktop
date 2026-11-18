@@ -40,7 +40,7 @@
   * MPRIS Music Player with a moving audio wave bar (*squiggly progress wave*).
   * Quick Folder Launchers (*Downloads, Documents, Pictures, Music*).
   * Interactive Control Center with a live volume slider and shortcut buttons (Dark Mode, Wi-Fi, Bluetooth).
-  * Quick Notes with an automatic file watcher (*live watcher* on `~/.config/quick-notes.txt`).
+  * Quick Notes with an automatic file watcher (*live watcher* on `~/.config/pixel-desktop/quick-notes.txt`).
 * **Resolution-Independent Layout**: Widget and dock positions are computed from the actual screen size at startup (e.g. 1920x1080 or 1366x768), so nothing is placed off-screen. Layouts saved on a different resolution are discarded automatically.
 * **Input Shape Click-Through**: Transparent click-through areas to the wallpaper without blocking the desktop.
 * **0.0% Idle CPU**: No active polling loops. Uses DBus UPower, DBus MPRIS, and a minute-boundary tick.
@@ -90,17 +90,22 @@ The installer script will automatically:
 
 ## 🛠️ Customization & Configuration Files
 
-All configuration files are stored neatly in standard JSON / text format in `~/.config/`:
+All configuration files are stored neatly in standard JSON / text format in `~/.config/pixel-desktop/`:
 
 | Configuration File | Description |
 | :--- | :--- |
-| **`~/.config/pixel-launcher-apps.json`** | List of apps pinned to the Dock (`name`, `icon`, `cmd`, `bg`, `shape`). Changes are updated on screen instantly without a restart. |
-| **`~/.config/pixel-widgets-pos.json`** | Desktop widget position coordinates (saved automatically when widgets are moved with a mouse drag). The file records the screen resolution; if the resolution changes, the default layout is regenerated instead of applying stale coordinates. |
-| **`~/.config/quick-notes.txt`** | Text content of the quick notes desktop widget. |
-| **`~/.config/weather-config.json`** | Weather location settings. With `"auto_location": true` (default) the city is detected via IP geolocation; if detection fails, Rome (Italy) is used. Set `"auto_location": false` plus `manual_city`, `manual_lat`, `manual_lon` to pin a location. |
-| **`~/.config/pixel-desktop.json`** | Optional overrides for companion-app locations (see below). |
+| **`~/.config/pixel-desktop/pixel-launcher-apps.json`** | List of apps pinned to the Dock (`name`, `icon`, `cmd`, `bg`, `shape`). Changes are updated on screen instantly without a restart. |
+| **`~/.config/pixel-desktop/pixel-widgets-pos.json`** | Desktop widget position coordinates (saved automatically when widgets are moved with a mouse drag). The file records the screen resolution; if the resolution changes, the default layout is regenerated instead of applying stale coordinates. |
+| **`~/.config/pixel-desktop/quick-notes.txt`** | Text content of the quick notes desktop widget. |
+| **`~/.config/pixel-desktop/weather-config.json`** | Weather location settings. With `"auto_location": true` (default) the city is detected via IP geolocation; if detection fails, Rome (Italy) is used. Set `"auto_location": false` plus `manual_city`, `manual_lat`, `manual_lon` to pin a location. |
+| **`~/.config/pixel-desktop/pixel-desktop.json`** | Optional overrides for companion-app locations (see below). |
+| **`~/.config/pixel-desktop/pixel-app-usage.json`** | App-drawer usage counters, used to rank frequently used apps. |
 
-Companion apps (WhatsApp PWA, YouTube Music, prayer-applet) are discovered automatically in this order: the path set in `~/.config/pixel-desktop.json`, then the well-known `~/Applications/<name>` location, then any standard installed application (deb/flatpak) via its desktop entry, then a web fallback. To point a companion at a custom directory:
+> Upgrading from an older version? `install.sh` automatically moves any of these files still located in `~/.config/` into `~/.config/pixel-desktop/` the next time it runs.
+
+The weather cache (last known location and forecast, used as an offline fallback) is stored in `~/.cache/pixel-desktop/weather-cache.json`; it is disposable and recreated automatically.
+
+Companion apps (WhatsApp PWA, YouTube Music, prayer-applet) are discovered automatically in this order: the path set in `~/.config/pixel-desktop/pixel-desktop.json`, then the well-known `~/Applications/<name>` location, then any standard installed application (deb/flatpak) via its desktop entry, then a web fallback. To point a companion at a custom directory:
 
 ```json
 {
@@ -144,9 +149,9 @@ Services run the scripts **directly from the cloned directory**, so edits to a s
 | `pixel_common.py` | Restart **all four** services (it is imported by every component) |
 | `fetch_weather.py` | Nothing — it is executed on demand by the desktop widget |
 | `install.sh` / `systemd/*.service` | Re-run `./install.sh` (re-renders the unit files and reloads systemd) — required after environment changes such as `GDK_BACKEND` or `XAUTHORITY` |
-| `~/.config/pixel-launcher-apps.json` | Nothing — the dock watches the file and reloads instantly |
-| `~/.config/quick-notes.txt` | Nothing — the notes widget watches the file live |
-| `~/.config/weather-config.json` | Nothing — the next weather fetch uses the new settings |
+| `~/.config/pixel-desktop/pixel-launcher-apps.json` | Nothing — the dock watches the file and reloads instantly |
+| `~/.config/pixel-desktop/quick-notes.txt` | Nothing — the notes widget watches the file live |
+| `~/.config/pixel-desktop/weather-config.json` | Nothing — the next weather fetch uses the new settings |
 | Moved the repository directory | Re-run `./install.sh` from the new location (the unit files embed the absolute path) |
 
 ### Pulling upstream updates

@@ -10,8 +10,8 @@ Designed for ThinkPad X1 Carbon Gen 6.
   * Real MPRIS Music Controller with Play/Pause/Skip & live metadata
   * Real Quick Folder Launchers (Downloads, Documents, Pictures, Music via Nemo)
   * Real Control Center with interactive live Volume slider & Quick Toggles
-  * Real Quick Notes with instant live file watcher (~/.config/quick-notes.txt)
-  * Dynamic Floating Dock configured via ~/.config/pixel-launcher-apps.json
+  * Real Quick Notes with instant live file watcher (~/.config/pixel-desktop/quick-notes.txt)
+  * Dynamic Floating Dock configured via ~/.config/pixel-desktop/pixel-launcher-apps.json
 - 0.0% CPU when idle (Event-driven DBus, file monitors & minute boundary timers)
 - Interactive hover cursor ('pointer') on every button
 - Click-through on transparent areas via input_shape_combine_region
@@ -100,10 +100,10 @@ WIDGET_SIZES = {
     "dock": (None, DOCK_H)
 }
 
-WIDGET_POSITIONS_FILE = os.path.expanduser("~/.config/pixel-widgets-pos.json")
+WIDGET_POSITIONS_FILE = pixel_common.config_path("pixel-widgets-pos.json")
 
-NOTES_FILE = os.path.expanduser("~/.config/quick-notes.txt")
-LAUNCHER_CONFIG_FILE = os.path.expanduser("~/.config/pixel-launcher-apps.json")
+NOTES_FILE = pixel_common.config_path("quick-notes.txt")
+LAUNCHER_CONFIG_FILE = pixel_common.config_path("pixel-launcher-apps.json")
 
 
 def hex_to_rgb(hex_str, default=(0.90, 0.90, 0.95)):
@@ -1515,7 +1515,7 @@ class MaterialYouDesktop(Gtk.Window):
         cr.move_to(nx + 32, ny + 5)
         PangoCairo.show_layout(cr, lnh)
 
-        # Real Notes Items from ~/.config/quick-notes.txt
+        # Real Notes Items from ~/.config/pixel-desktop/quick-notes.txt
         for i, item in enumerate(self.quick_notes[:3]):
             if len(item) > 28:
                 item = item[:27] + "…"

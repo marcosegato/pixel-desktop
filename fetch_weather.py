@@ -4,8 +4,10 @@ import json
 import urllib.request
 import time
 
-CONFIG_PATH = os.path.expanduser("~/.config/weather-config.json")
-CACHE_PATH = os.path.expanduser("~/.cache/weather-cache.json")
+import pixel_common
+
+CONFIG_PATH = pixel_common.config_path("weather-config.json")
+CACHE_PATH = pixel_common.cache_path("weather-cache.json")
 
 # Default fallback coordinates (Rome, Italy)
 DEFAULT_CITY = "Rome"

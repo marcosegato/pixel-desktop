@@ -50,7 +50,7 @@ GAP = 14
 WINDOW_H = DOCK_H + GAP             # 78
 SHOWN_Y = SCREEN_HEIGHT - WINDOW_H  # 1002
 HIDDEN_Y = SCREEN_HEIGHT + 15       # 1095 (completely offscreen below screen bottom)
-LAUNCHER_CONFIG_FILE = os.path.expanduser("~/.config/pixel-launcher-apps.json")
+LAUNCHER_CONFIG_FILE = pixel_common.config_path("pixel-launcher-apps.json")
 
 # WhatsApp Multi profile identifiers.
 WHATSAPP_WORK_SCRIPT     = "launch-work.sh"
@@ -292,8 +292,7 @@ class PixelDock(Gtk.Window):
                 print(f"[PixelDock] Error loading launcher apps: {e}")
 
         if not raw:
-            home = os.path.expanduser("~")
-            notes_path = os.path.join(home, ".config/quick-notes.txt")
+            notes_path = pixel_common.config_path("quick-notes.txt")
 
             # WhatsApp & YouTube Music: bespoke companion script -> installed
             # desktop entry -> web fallback. Icons: companion asset -> desktop
@@ -844,6 +843,7 @@ class PixelDock(Gtk.Window):
                 "shape": app.get("shape", "circle")
             })
         try:
+            os.makedirs(os.path.dirname(LAUNCHER_CONFIG_FILE), exist_ok=True)
             with open(LAUNCHER_CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(to_save, f, indent=2, ensure_ascii=False)
         except Exception as e:
@@ -1088,7 +1088,7 @@ class PixelDock(Gtk.Window):
 
         elif "notes" in name.lower() or "xed" in cmd.lower():
             item_n = Gtk.MenuItem(label="📝  Open Quick Notes")
-            item_n.connect("activate", lambda w: subprocess.Popen(["xed", os.path.expanduser("~/.config/quick-notes.txt")], start_new_session=True))
+            item_n.connect("activate", lambda w: subprocess.Popen(["xed", pixel_common.config_path("quick-notes.txt")], start_new_session=True))
             menu.append(item_n)
 
         else:
@@ -1157,6 +1157,7 @@ class PixelDock(Gtk.Window):
             }
             apps.append(new_entry)
             try:
+                os.makedirs(os.path.dirname(LAUNCHER_CONFIG_FILE), exist_ok=True)
                 with open(LAUNCHER_CONFIG_FILE, "w", encoding="utf-8") as f:
                     json.dump(apps, f, indent=2, ensure_ascii=False)
             except Exception as e:
@@ -1176,6 +1177,7 @@ class PixelDock(Gtk.Window):
 
         apps = [a for a in apps if a.get("name", "").lower() != app.get("name", "").lower() and a.get("cmd", "").lower() != app.get("cmd", "").lower()]
         try:
+            os.makedirs(os.path.dirname(LAUNCHER_CONFIG_FILE), exist_ok=True)
             with open(LAUNCHER_CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(apps, f, indent=2, ensure_ascii=False)
         except Exception as e:

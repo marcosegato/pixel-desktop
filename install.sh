@@ -87,15 +87,41 @@ fi
 
 # 3. Default Configuration & Scratchpad
 echo -e "\n${C_BOLD}${C_BLUE}[3/6] Checking initial configuration...${C_RESET}"
-mkdir -p "$HOME/.config"
-if [ ! -f "$HOME/.config/quick-notes.txt" ]; then
-    cat << 'EOF' > "$HOME/.config/quick-notes.txt"
+CONFIG_DIR="$HOME/.config/pixel-desktop"
+mkdir -p "$CONFIG_DIR"
+
+# Migrate configuration files from the old ~/.config/ location (one-time).
+LEGACY_CONFIGS=(
+    "pixel-launcher-apps.json"
+    "pixel-widgets-pos.json"
+    "pixel-desktop.json"
+    "pixel-app-usage.json"
+    "weather-config.json"
+    "quick-notes.txt"
+)
+for cfg in "${LEGACY_CONFIGS[@]}"; do
+    if [ -f "$HOME/.config/$cfg" ] && [ ! -e "$CONFIG_DIR/$cfg" ]; then
+        mv "$HOME/.config/$cfg" "$CONFIG_DIR/$cfg"
+        echo -e "${C_GREEN}✓ Migrated ~/.config/$cfg -> ~/.config/pixel-desktop/$cfg${C_RESET}"
+    fi
+done
+
+# Migrate the weather cache as well (disposable, but keeps offline fallback).
+CACHE_DIR="$HOME/.cache/pixel-desktop"
+mkdir -p "$CACHE_DIR"
+if [ -f "$HOME/.cache/weather-cache.json" ] && [ ! -e "$CACHE_DIR/weather-cache.json" ]; then
+    mv "$HOME/.cache/weather-cache.json" "$CACHE_DIR/weather-cache.json"
+    echo -e "${C_GREEN}✓ Migrated ~/.cache/weather-cache.json -> ~/.cache/pixel-desktop/weather-cache.json${C_RESET}"
+fi
+
+if [ ! -f "$CONFIG_DIR/quick-notes.txt" ]; then
+    cat << 'EOF' > "$CONFIG_DIR/quick-notes.txt"
 # Quick Notes (Pixel Quick Notes)
 - Click on this widget to open the text editor.
 - Supports live updates without reload.
 - Write your to-do list or daily agenda here!
 EOF
-    echo -e "${C_GREEN}✓ Initial notes file ~/.config/quick-notes.txt created.${C_RESET}"
+    echo -e "${C_GREEN}✓ Initial notes file ~/.config/pixel-desktop/quick-notes.txt created.${C_RESET}"
 fi
 
 # 4. Systemd User Services Installation

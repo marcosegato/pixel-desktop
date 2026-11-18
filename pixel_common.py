@@ -7,7 +7,7 @@ where the repository is cloned and no matter where companion projects
 (WhatsApp PWA, YouTube Music, prayer-applet) live on the user's machine.
 
 Resolution order for companion projects:
-  1. Explicit user override in ~/.config/pixel-desktop.json
+  1. Explicit user override in ~/.config/pixel-desktop/pixel-desktop.json
      -> {"companion_apps": {"whatsapp": "/some/other/dir", ...}}
   2. Well-known default location (~/Applications/<dir>)
   3. None (callers fall back to desktop entries or web URLs)
@@ -26,8 +26,24 @@ import subprocess
 # The suite's own installation directory (works wherever the repo is cloned).
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# All configuration files live in a single, dedicated directory.
+CONFIG_DIR = os.path.expanduser("~/.config/pixel-desktop")
+
+# Runtime caches (disposable data) live in the matching cache directory.
+CACHE_DIR = os.path.expanduser("~/.cache/pixel-desktop")
+
 # Optional user overrides for companion project locations.
-CONFIG_FILE = os.path.expanduser("~/.config/pixel-desktop.json")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "pixel-desktop.json")
+
+
+def config_path(name):
+    """Absolute path of a configuration file inside CONFIG_DIR."""
+    return os.path.join(CONFIG_DIR, name)
+
+
+def cache_path(name):
+    """Absolute path of a cache file inside CACHE_DIR."""
+    return os.path.join(CACHE_DIR, name)
 
 # Well-known default locations of companion projects.
 DEFAULT_COMPANIONS = {

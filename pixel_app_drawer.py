@@ -28,7 +28,7 @@ import pixel_common
 SOCKET_PATH = "/tmp/pixel_app_drawer.sock"
 DRAWER_WIDTH = 792
 DRAWER_HEIGHT = 570
-USAGE_FILE = os.path.expanduser("~/.config/pixel-app-usage.json")
+USAGE_FILE = pixel_common.config_path("pixel-app-usage.json")
 
 def record_app_usage(app_id):
     if not app_id:
@@ -43,6 +43,7 @@ def record_app_usage(app_id):
         entry["count"] = entry.get("count", 0) + 1
         entry["last_used"] = int(time.time())
         data[key] = entry
+        os.makedirs(os.path.dirname(USAGE_FILE), exist_ok=True)
         with open(USAGE_FILE, "w") as f:
             json.dump(data, f, indent=2)
     except Exception as e:
