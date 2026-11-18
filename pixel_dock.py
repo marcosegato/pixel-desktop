@@ -524,7 +524,7 @@ class PixelDock(Gtk.Window):
                             elif "telegram" in p_name:
                                 p_keys = ["telegram", "telegramdesktop", "org.telegram.desktop"]
                             elif "settings" in p_name:
-                                p_keys = ["cinnamon-settings", "gnome-control-center"]
+                                p_keys = ["gnome-control-center"]
                             elif "notes" in p_name or "xed" in p_cmd:
                                 p_keys = ["xed"]
                             else:

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 Material You (MD3) Pastel Desktop Environment for Debian-based Linux
-(GTK/GNOME-based desktop environments such as Cinnamon or GNOME).
+(GTK/GNOME-based desktop environments).
 Designed for ThinkPad X1 Carbon Gen 6.
 - 100% REAL & FULLY FUNCTIONAL WIDGETS (Not mockups!):
   * Live Clock & Calendar (opens calendar settings)
-  * Real Open-Meteo Weather for Malang (opens forecast)
+  * Real Open-Meteo Weather with IP geolocation (Rome fallback, opens forecast)
   * Real ThinkPad Battery & Thermal telemetry (opens power settings)
   * Real MPRIS Music Controller with Play/Pause/Skip & live metadata
   * Real Quick Folder Launchers (Downloads, Documents, Pictures, Music via Nemo)
@@ -806,8 +806,6 @@ class MaterialYouDesktop(Gtk.Window):
             try:
                 script_dir = os.path.dirname(os.path.abspath(__file__))
                 weather_script = os.path.join(script_dir, "fetch_weather.py")
-                if not os.path.exists(weather_script):
-                    weather_script = os.path.expanduser("~/.local/share/cinnamon/desklets/weather-widget@teddy/fetch_weather.py")
                 cmd = [sys.executable, weather_script]
                 res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                 if res.returncode == 0:
@@ -1920,7 +1918,7 @@ class MaterialYouDesktop(Gtk.Window):
                 pixel_common.open_settings("calendar")
             elif cand == "weather_battery":
                 if event.x <= self.weather_bat_x + 130:
-                    subprocess.Popen(["google-chrome", "https://weather.com/weather/today/l/-7.98,112.63"])
+                    subprocess.Popen(["google-chrome", "https://weather.com/weather/today/l/41.9028,12.4964"])
                 else:
                     pixel_common.open_settings("power")
             elif cand == "date_notes":
@@ -2130,22 +2128,19 @@ class MaterialYouDesktop(Gtk.Window):
                 return
             except Exception as e:
                 print(f"[MaterialYou] Dark mode toggle error: {e}")
-        # Fallback GTK interface toggle (works on GNOME and Cinnamon schemas)
-        for schema in ("org.gnome.desktop.interface", "org.cinnamon.desktop.interface"):
-            try:
-                s = Gio.Settings.new(schema)
-                cur = s.get_string("gtk-theme")
-                if not cur:
-                    continue
+        # Fallback GTK interface toggle (GNOME schema)
+        try:
+            s = Gio.Settings.new("org.gnome.desktop.interface")
+            cur = s.get_string("gtk-theme")
+            if cur:
                 if "Dark" in cur:
                     s.set_string("gtk-theme", cur.replace("Dark", "Light").replace("-dark", "-light"))
                 else:
                     s.set_string("gtk-theme", cur.replace("Light", "Dark").replace("-light", "-dark"))
                 self.is_dark_mode = not self.is_dark_mode
                 self.queue_draw()
-                break
-            except Exception:
-                continue
+        except Exception:
+            pass
 
     def activate_search(self):
         try:

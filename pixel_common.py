@@ -133,23 +133,22 @@ def desktop_app_icon_spec(app):
 
 
 # ---------------------------------------------------------------------
-# Desktop environment helpers (GTK/GNOME-based: Cinnamon, GNOME, etc.)
+# Desktop environment helpers (GTK/GNOME-based desktops)
 # ---------------------------------------------------------------------
 
 _settings_cmd_cache = None
 
-# Panels whose names differ between cinnamon-settings and gnome-control-center.
+# Panels whose names differ between settings GUIs.
 GNOME_PANEL_ALIASES = {
     "calendar": "datetime",
 }
 
 
 def settings_cmd():
-    """Command of the system settings GUI, whatever the GTK/GNOME environment."""
+    """Command of the system settings GUI (GNOME/GTK)."""
     global _settings_cmd_cache
     if _settings_cmd_cache is None:
-        _settings_cmd_cache = (shutil.which("cinnamon-settings")
-                               or shutil.which("gnome-control-center")
+        _settings_cmd_cache = (shutil.which("gnome-control-center")
                                or "gnome-control-center")
     return _settings_cmd_cache
 
@@ -164,16 +163,12 @@ def open_settings(panel=""):
 
 
 def session_quit_cmd():
-    """Command list to power off the session (Cinnamon or GNOME)."""
-    if shutil.which("cinnamon-session-quit"):
-        return ["cinnamon-session-quit", "--power-off"]
+    """Command list to power off the session (GNOME/GTK)."""
     return ["gnome-session-quit", "--power-off"]
 
 
 def lock_cmd():
-    """Command list to lock the screen on any GTK/GNOME-based environment."""
-    if shutil.which("cinnamon-screensaver-command"):
-        return ["cinnamon-screensaver-command", "--lock"]
+    """Command list to lock the screen on a GTK/GNOME-based desktop."""
     if shutil.which("gnome-screensaver-command"):
         return ["gnome-screensaver-command", "--lock"]
     return ["loginctl", "lock-session"]

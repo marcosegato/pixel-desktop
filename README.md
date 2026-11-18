@@ -35,7 +35,7 @@
 ### 4. Interactive Desktop Canvas (`pixel_desktop.py`)
 * **Native Google Pixel Widgets**:
   * Large Digital Clock & Calendar with *Google Sans* typography.
-  * Real-Time Open-Meteo Weather with automatic location detection via IP geolocation.
+  * Real-Time Open-Meteo Weather with automatic location detection via IP geolocation (falls back to Rome, Italy).
   * ThinkPad Temperature & Battery Telemetry.
   * MPRIS Music Player with a moving audio wave bar (*squiggly progress wave*).
   * Quick Folder Launchers (*Downloads, Documents, Pictures, Music*).
@@ -49,7 +49,7 @@
 ## 🚀 Installation Guide (Quick Start)
 
 ### System Requirements (Prerequisites)
-* **Distro**: any Debian-based distribution (Linux Mint, Ubuntu, Debian, etc.) with an X11 session and a GTK/GNOME-based desktop environment (Cinnamon, GNOME, ...).
+* **Distro**: any Debian-based distribution (Ubuntu, Debian, etc.) with an X11 session and a GTK/GNOME-based desktop environment (GNOME, ...).
 * **Python**: Python 3.10 or above.
 
 ### 1-Click Installation via Script
@@ -70,7 +70,7 @@ The installer script will automatically:
 * Check and install system dependency packages (`python3-gi`, `gir1.2-wnck-3.0`, `python3-xlib`, `wmctrl`, etc.).
 * Install the official *Google Sans* fonts to `~/.local/share/fonts/`.
 * Register and enable 4 `systemd --user` background services, pointing at the directory you cloned to.
-* Configure the desktop environment's `Alt+Tab` shortcut to the Pixel Recent Apps Switcher (Cinnamon and GNOME are supported out of the box).
+* Configure the desktop environment's `Alt+Tab` shortcut to the Pixel Recent Apps Switcher (GNOME/GTK-based desktops).
 
 ---
 
@@ -95,7 +95,7 @@ All configuration files are stored neatly in standard JSON / text format in `~/.
 | **`~/.config/pixel-launcher-apps.json`** | List of apps pinned to the Dock (`name`, `icon`, `cmd`, `bg`, `shape`). Changes are updated on screen instantly without a restart. |
 | **`~/.config/pixel-widgets-pos.json`** | Desktop widget position coordinates (saved automatically when widgets are moved with a mouse drag). |
 | **`~/.config/quick-notes.txt`** | Text content of the quick notes desktop widget. |
-| **`~/.config/weather-config.json`** | Manual weather coordinate settings (city, latitude, longitude) when not using IP auto-detect. |
+| **`~/.config/weather-config.json`** | Weather location settings. With `"auto_location": true` (default) the city is detected via IP geolocation; if detection fails, Rome (Italy) is used. Set `"auto_location": false` plus `manual_city`, `manual_lat`, `manual_lon` to pin a location. |
 | **`~/.config/pixel-desktop.json`** | Optional overrides for companion-app locations (see below). |
 
 Companion apps (WhatsApp PWA, YouTube Music, prayer-applet) are discovered automatically in this order: the path set in `~/.config/pixel-desktop.json`, then the well-known `~/Applications/<name>` location, then any standard installed application (deb/flatpak) via its desktop entry, then a web fallback. To point a companion at a custom directory:
@@ -126,6 +126,49 @@ systemctl --user restart pixel-dock.service
 # Temporarily stop
 systemctl --user stop pixel-dock pixel-desktop pixel-recent-apps pixel-app-drawer
 ```
+
+---
+
+## 🔄 Applying Changes & Updates
+
+Services run the scripts **directly from the cloned directory**, so edits to a script are picked up as soon as the corresponding service is restarted. Use this table to know what to restart:
+
+| Changed file | Action required |
+| :--- | :--- |
+| `pixel_dock.py` | `systemctl --user restart pixel-dock.service` |
+| `pixel_desktop.py` | `systemctl --user restart pixel-desktop.service` |
+| `pixel_app_drawer.py` | `systemctl --user restart pixel-app-drawer.service` |
+| `pixel_recent_apps.py` | `systemctl --user restart pixel-recent-apps.service` |
+| `pixel_common.py` | Restart **all four** services (it is imported by every component) |
+| `fetch_weather.py` | Nothing — it is executed on demand by the desktop widget |
+| `install.sh` / `systemd/*.service` | Re-run `./install.sh` (re-renders the unit files and reloads systemd) |
+| `~/.config/pixel-launcher-apps.json` | Nothing — the dock watches the file and reloads instantly |
+| `~/.config/quick-notes.txt` | Nothing — the notes widget watches the file live |
+| `~/.config/weather-config.json` | Nothing — the next weather fetch uses the new settings |
+| Moved the repository directory | Re-run `./install.sh` from the new location (the unit files embed the absolute path) |
+
+### Pulling upstream updates
+
+If you modified files locally, `git pull` may refuse to overwrite them. To take the upstream version of a script and reinstall cleanly:
+
+```bash
+cd /path/to/pixel-desktop
+git stash            # or: git checkout -- <file> to discard local changes in one file
+git pull
+git stash pop        # re-apply your local changes (skip if you discarded them)
+
+# Re-render the systemd units and restart everything
+./install.sh -y
+systemctl --user daemon-reload
+systemctl --user restart pixel-dock pixel-desktop pixel-recent-apps pixel-app-drawer
+```
+
+If a change still does not appear after restarting:
+
+1. Check the service logs: `journalctl --user -u pixel-dock.service -n 50 --no-pager` (repeat for the other units).
+2. Verify the unit points at the right directory: `systemctl --user cat pixel-dock.service | grep ExecStart`.
+3. If the repository moved, re-run `./install.sh` so the units are regenerated with the new path.
+4. Log out and back in (or `systemctl --user daemon-reload`) if a unit file was edited manually — systemd caches unit definitions.
 
 ---
 

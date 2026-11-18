@@ -124,78 +124,41 @@ echo "Enabling and starting services..."
 systemctl --user enable --now "${SERVICES[@]}"
 echo -e "${C_GREEN}✓ All 4 Pixel Desktop services are active and running.${C_RESET}"
 
-# 5. Alt+Tab Keybindings (GTK/GNOME-based desktops: Cinnamon, GNOME, ...)
+# 5. Alt+Tab Keybindings (GTK/GNOME-based desktops)
 echo -e "\n${C_BOLD}${C_BLUE}[5/5] Configuring Alt+Tab shortcuts...${C_RESET}"
 if command -v gsettings >/dev/null 2>&1; then
-    # Detect the desktop environment: XDG_CURRENT_DESKTOP first, then a
-    # cinnamon-session probe; fall back to the GNOME/GTK generic path.
-    DE="${XDG_CURRENT_DESKTOP,,}"
-    if [[ "$DE" == *cinnamon* ]] || command -v cinnamon-session >/dev/null 2>&1; then
-        DE_CODE="cinnamon"
-    else
-        DE_CODE="gnome"
-    fi
+    # GNOME / GTK path (settings-daemon media-keys custom keybindings)
+    MEDIA_KEYS="org.gnome.settings-daemon.plugins.media-keys"
+    KB_PATH1="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/pixel-alttab/"
+    KB_PATH2="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/pixel-alttab-reverse/"
 
-    if [ "$DE_CODE" = "cinnamon" ]; then
-        # Disable default switch-windows
-        gsettings set org.cinnamon.desktop.keybindings.wm switch-windows "[]"
-        gsettings set org.cinnamon.desktop.keybindings.wm switch-windows-backward "[]"
+    # Disable built-in window switching to avoid conflicts
+    gsettings set org.gnome.desktop.wm.keybindings switch-windows "[]"
+    gsettings set org.gnome.desktop.wm.keybindings switch-windows-backward "[]"
 
-        # Add custom keybinding if not already present
-        CUSTOM_LIST=$(gsettings get org.cinnamon.desktop.keybindings custom-list)
-
-        # Custom12: Alt+Tab / Super+Tab -> alt-tab
-        if [[ "$CUSTOM_LIST" != *"custom12"* ]]; then
-            CUSTOM_LIST="${CUSTOM_LIST%]*}, 'custom12']"
-            gsettings set org.cinnamon.desktop.keybindings custom-list "$CUSTOM_LIST"
-        fi
-        gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom12/ name "Pixel Recent Apps"
-        gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom12/ binding "['<Alt>Tab', '<Super>Tab']"
-        gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom12/ command "$SCRIPT_DIR/pixel_recent_apps.py alt-tab"
-
-        # Custom13: Shift+Alt+Tab / Shift+Super+Tab -> prev
-        if [[ "$CUSTOM_LIST" != *"custom13"* ]]; then
-            CUSTOM_LIST="${CUSTOM_LIST%]*}, 'custom13']"
-            gsettings set org.cinnamon.desktop.keybindings custom-list "$CUSTOM_LIST"
-        fi
-        gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom13/ name "Pixel Recent Apps Reverse"
-        gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom13/ binding "['<Shift><Alt>Tab', '<Shift><Super>Tab']"
-        gsettings set org.cinnamon.desktop.keybindings.custom-keybinding:/org/cinnamon/desktop/keybindings/custom-keybindings/custom13/ command "$SCRIPT_DIR/pixel_recent_apps.py prev"
-        echo -e "${C_GREEN}✓ Alt+Tab and Super+Tab shortcuts wired to the Pixel Switcher (Cinnamon).${C_RESET}"
-    else
-        # GNOME / generic GTK path (settings-daemon media-keys custom keybindings)
-        MEDIA_KEYS="org.gnome.settings-daemon.plugins.media-keys"
-        KB_PATH1="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/pixel-alttab/"
-        KB_PATH2="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/pixel-alttab-reverse/"
-
-        # Disable built-in window switching to avoid conflicts
-        gsettings set org.gnome.desktop.wm.keybindings switch-windows "[]"
-        gsettings set org.gnome.desktop.wm.keybindings switch-windows-backward "[]"
-
-        # Append our keybindings to the custom list (handles "@as []" and "[]")
-        CUSTOM_LIST=$(gsettings get "$MEDIA_KEYS" custom-keybindings 2>/dev/null || echo "@as []")
-        CUSTOM_LIST="${CUSTOM_LIST#@as }"
-        NEW_LIST="$CUSTOM_LIST"
-        for KBP in "$KB_PATH1" "$KB_PATH2"; do
-            if [[ "$NEW_LIST" != *"$KBP"* ]]; then
-                if [[ -z "$NEW_LIST" || "$NEW_LIST" == "[]" ]]; then
-                    NEW_LIST="['$KBP']"
-                else
-                    NEW_LIST="${NEW_LIST%]}, '$KBP']"
-                fi
+    # Append our keybindings to the custom list (handles "@as []" and "[]")
+    CUSTOM_LIST=$(gsettings get "$MEDIA_KEYS" custom-keybindings 2>/dev/null || echo "@as []")
+    CUSTOM_LIST="${CUSTOM_LIST#@as }"
+    NEW_LIST="$CUSTOM_LIST"
+    for KBP in "$KB_PATH1" "$KB_PATH2"; do
+        if [[ "$NEW_LIST" != *"$KBP"* ]]; then
+            if [[ -z "$NEW_LIST" || "$NEW_LIST" == "[]" ]]; then
+                NEW_LIST="['$KBP']"
+            else
+                NEW_LIST="${NEW_LIST%]}, '$KBP']"
             fi
-        done
-        gsettings set "$MEDIA_KEYS" custom-keybindings "$NEW_LIST"
+        fi
+    done
+    gsettings set "$MEDIA_KEYS" custom-keybindings "$NEW_LIST"
 
-        gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH1" name "Pixel Recent Apps"
-        gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH1" binding "['<Alt>Tab', '<Super>Tab']"
-        gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH1" command "$SCRIPT_DIR/pixel_recent_apps.py alt-tab"
+    gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH1" name "Pixel Recent Apps"
+    gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH1" binding "['<Alt>Tab', '<Super>Tab']"
+    gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH1" command "$SCRIPT_DIR/pixel_recent_apps.py alt-tab"
 
-        gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH2" name "Pixel Recent Apps Reverse"
-        gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH2" binding "['<Shift><Alt>Tab', '<Shift><Super>Tab']"
-        gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH2" command "$SCRIPT_DIR/pixel_recent_apps.py prev"
-        echo -e "${C_GREEN}✓ Alt+Tab and Super+Tab shortcuts wired to the Pixel Switcher (GNOME/GTK).${C_RESET}"
-    fi
+    gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH2" name "Pixel Recent Apps Reverse"
+    gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH2" binding "['<Shift><Alt>Tab', '<Shift><Super>Tab']"
+    gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH2" command "$SCRIPT_DIR/pixel_recent_apps.py prev"
+    echo -e "${C_GREEN}✓ Alt+Tab and Super+Tab shortcuts wired to the Pixel Switcher (GNOME/GTK).${C_RESET}"
 fi
 
 echo -e "\n${C_BOLD}${C_GREEN}══════════════════════════════════════════════════════════════════════${C_RESET}"

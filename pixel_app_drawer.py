@@ -23,6 +23,8 @@ gi.require_version('Gdk', '3.0')
 gi.require_version('Gio', '2.0')
 from gi.repository import Gtk, Gdk, Gio, GLib, Pango
 
+import pixel_common
+
 SOCKET_PATH = "/tmp/pixel_app_drawer.sock"
 DRAWER_WIDTH = 792
 DRAWER_HEIGHT = 570
@@ -971,7 +973,7 @@ class PixelAppDrawer(Gtk.Window):
 
     def _on_power_clicked(self):
         self.hide_drawer()
-        subprocess.Popen(["cinnamon-session-quit", "--power-off"])
+        subprocess.Popen(pixel_common.session_quit_cmd())
 
     def _on_flowbox_child_activated(self, flowbox, child):
         tile = child.get_child()

@@ -7,10 +7,10 @@ import time
 CONFIG_PATH = os.path.expanduser("~/.config/weather-config.json")
 CACHE_PATH = os.path.expanduser("~/.cache/weather-cache.json")
 
-# Default fallback coordinates (Malang)
-DEFAULT_CITY = "Malang"
-DEFAULT_LAT = -7.9826
-DEFAULT_LON = 112.6308
+# Default fallback coordinates (Rome, Italy)
+DEFAULT_CITY = "Rome"
+DEFAULT_LAT = 41.9028
+DEFAULT_LON = 12.4964
 
 def load_config():
     if os.path.exists(CONFIG_PATH):
@@ -98,7 +98,8 @@ def get_weather():
         lat = config.get("manual_lat", DEFAULT_LAT)
         lon = config.get("manual_lon", DEFAULT_LON)
     else:
-        # Auto detect via multi-provider IP geolocation
+        # Auto-detect via multi-provider IP geolocation; fall back to the
+        # last known location, then to Rome (Italy).
         detected = fetch_ip_location()
         if detected:
             city = detected["city"]
@@ -106,10 +107,10 @@ def get_weather():
             lon = detected["lon"]
             cache["last_location"] = detected
         elif "last_location" in cache:
-            # Fallback to last known location
             city = cache["last_location"].get("city", city)
             lat = cache["last_location"].get("lat", lat)
             lon = cache["last_location"].get("lon", lon)
+        # else: keep the Rome defaults
 
     # Fetch weather forecast from Open-Meteo
     try:
