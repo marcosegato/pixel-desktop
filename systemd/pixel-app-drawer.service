@@ -10,7 +10,7 @@ Restart=always
 RestartSec=2
 KillMode=process
 Environment=DISPLAY=:0
-Environment=XAUTHORITY=%h/.Xauthority
+Environment=GDK_BACKEND=x11
 
 [Install]
 WantedBy=graphical-session.target

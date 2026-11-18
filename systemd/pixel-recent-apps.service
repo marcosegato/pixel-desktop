@@ -9,7 +9,7 @@ ExecStart=/usr/bin/python3 @PIXEL_DESKTOP_DIR@/pixel_recent_apps.py daemon
 Restart=always
 RestartSec=2
 Environment=DISPLAY=:0
-Environment=XAUTHORITY=%h/.Xauthority
+Environment=GDK_BACKEND=x11
 
 [Install]
 WantedBy=graphical-session.target

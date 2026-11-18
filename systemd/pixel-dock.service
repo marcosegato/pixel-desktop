@@ -12,7 +12,7 @@ KillMode=process
 KillSignal=SIGTERM
 TimeoutStopSec=3
 Environment=DISPLAY=:0
-Environment=XAUTHORITY=%h/.Xauthority
+Environment=GDK_BACKEND=x11
 
 [Install]
 WantedBy=graphical-session.target

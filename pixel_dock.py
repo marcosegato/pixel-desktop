@@ -75,6 +75,8 @@ class PixelDock(Gtk.Window):
         self.set_decorated(False)
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
+        self.set_accept_focus(False)
+        self.set_focus_on_map(False)
         self.set_keep_above(True)
         self.stick()
         self.set_type_hint(Gdk.WindowTypeHint.DOCK)

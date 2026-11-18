@@ -49,7 +49,7 @@
 ## 🚀 Installation Guide (Quick Start)
 
 ### System Requirements (Prerequisites)
-* **Distro**: any Debian-based distribution (Ubuntu, Debian, etc.) with an X11 session and a GTK/GNOME-based desktop environment (GNOME, ...).
+* **Distro**: any Debian-based distribution (Ubuntu, Debian, etc.) with a GTK/GNOME-based desktop environment (GNOME, ...), on an X11 session or a Wayland session providing XWayland — the services run with `GDK_BACKEND=x11`, and the dock/desktop windows are marked `SKIP_TASKBAR` + `DOCK` so they never appear in the dash or the Alt+Tab switcher.
 * **Python**: Python 3.10 or above.
 
 ### 1-Click Installation via Script
@@ -142,7 +142,7 @@ Services run the scripts **directly from the cloned directory**, so edits to a s
 | `pixel_recent_apps.py` | `systemctl --user restart pixel-recent-apps.service` |
 | `pixel_common.py` | Restart **all four** services (it is imported by every component) |
 | `fetch_weather.py` | Nothing — it is executed on demand by the desktop widget |
-| `install.sh` / `systemd/*.service` | Re-run `./install.sh` (re-renders the unit files and reloads systemd) |
+| `install.sh` / `systemd/*.service` | Re-run `./install.sh` (re-renders the unit files and reloads systemd) — required after environment changes such as `GDK_BACKEND` or `XAUTHORITY` |
 | `~/.config/pixel-launcher-apps.json` | Nothing — the dock watches the file and reloads instantly |
 | `~/.config/quick-notes.txt` | Nothing — the notes widget watches the file live |
 | `~/.config/weather-config.json` | Nothing — the next weather fetch uses the new settings |
