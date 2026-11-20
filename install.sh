@@ -23,6 +23,44 @@ C_GREEN="\033[38;2;76;175;80m"
 C_BLUE="\033[38;2;66;133;244m"
 C_YELLOW="\033[38;2;251;188;4m"
 
+ask_yes_no() {
+    local question="$1"
+    local answer=""
+    if [ "$AUTO_YES" = true ]; then
+        echo -e "${C_BLUE}${question} [Y/n]: yes (auto)${C_RESET}"
+        return 0
+    fi
+    while true; do
+        read -rp "$(echo -e "${C_BLUE}${question} [Y/n]: ${C_RESET}")" answer || true
+        case "$answer" in
+            ""|[Yy]|[Yy][Ee][Ss]) return 0 ;;
+            [Nn]|[Nn][Oo]) return 1 ;;
+            *) echo -e "${C_YELLOW}Please answer y or n.${C_RESET}" ;;
+        esac
+    done
+}
+
+clear_pixel_keybindings() {
+    # Restore GNOME/GTK defaults and remove the suite's custom Alt+Tab entries.
+    command -v gsettings >/dev/null 2>&1 || return 0
+    gsettings set org.gnome.desktop.wm.keybindings switch-windows "['<Alt>Tab']" 2>/dev/null || true
+    gsettings set org.gnome.desktop.wm.keybindings switch-windows-backward "['<Shift><Alt>Tab']" 2>/dev/null || true
+    local media_keys="org.gnome.settings-daemon.plugins.media-keys"
+    local current cleaned
+    current=$(gsettings get "$media_keys" custom-keybindings 2>/dev/null || echo "")
+    current="${current#@as }"
+    if [[ -n "$current" && "$current" != "[]" ]]; then
+        cleaned=$(echo "$current" | sed \
+            -e "s|, */org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/pixel-alttab/||g" \
+            -e "s|, */org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/pixel-alttab-reverse/||g" \
+            -e "s|/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/pixel-alttab/, ||g" \
+            -e "s|/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/pixel-alttab-reverse/, ||g" \
+            -e "s|/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/pixel-alttab/||g" \
+            -e "s|/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/pixel-alttab-reverse/||g")
+        gsettings set "$media_keys" custom-keybindings "$cleaned" 2>/dev/null || true
+    fi
+}
+
 echo -e "${C_BOLD}${C_TERRACOTTA}"
 echo "  ╔══════════════════════════════════════════════════════════════════════╗"
 echo "  ║         Google Pixel UI / Material Design 3 Desktop Suite            ║"
@@ -126,17 +164,52 @@ fi
 
 # 4. Systemd User Services Installation
 echo -e "\n${C_BOLD}${C_BLUE}[4/6] Installing systemd user background services...${C_RESET}"
-SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
-mkdir -p "$SYSTEMD_USER_DIR"
 
-SERVICES=(
+DOCK_SERVICES=(
     "pixel-dock.service"
-    "pixel-desktop.service"
     "pixel-app-drawer.service"
     "pixel-recent-apps.service"
 )
+DESKTOP_SERVICES=(
+    "pixel-desktop.service"
+)
 
-for svc in "${SERVICES[@]}"; do
+if ask_yes_no "Activate the dock (includes app drawer and recent apps)?"; then
+    ACTIVATE_DOCK=true
+else
+    ACTIVATE_DOCK=false
+fi
+if ask_yes_no "Activate the desktop (widgets and canvas)?"; then
+    ACTIVATE_DESKTOP=true
+else
+    ACTIVATE_DESKTOP=false
+fi
+
+ENABLE_SERVICES=()
+DISABLE_SERVICES=()
+if [ "$ACTIVATE_DOCK" = true ]; then
+    ENABLE_SERVICES+=("${DOCK_SERVICES[@]}")
+else
+    DISABLE_SERVICES+=("${DOCK_SERVICES[@]}")
+fi
+if [ "$ACTIVATE_DESKTOP" = true ]; then
+    ENABLE_SERVICES+=("${DESKTOP_SERVICES[@]}")
+else
+    DISABLE_SERVICES+=("${DESKTOP_SERVICES[@]}")
+fi
+
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+mkdir -p "$SYSTEMD_USER_DIR"
+
+# Stop, disable and remove the units of the components the user declined.
+for svc in "${DISABLE_SERVICES[@]}"; do
+    systemctl --user disable --now "$svc" >/dev/null 2>&1 || true
+    rm -f "$SYSTEMD_USER_DIR/$svc"
+    echo "  - Deactivated: $svc"
+done
+
+# Install the unit files of the selected components.
+for svc in "${ENABLE_SERVICES[@]}"; do
     SRC_FILE="$SCRIPT_DIR/systemd/$svc"
     DST_FILE="$SYSTEMD_USER_DIR/$svc"
     if [ -f "$SRC_FILE" ]; then
@@ -146,13 +219,20 @@ for svc in "${SERVICES[@]}"; do
 done
 
 systemctl --user daemon-reload
-echo "Enabling and starting services..."
-systemctl --user enable --now "${SERVICES[@]}"
-echo -e "${C_GREEN}✓ All 4 Pixel Desktop services are active and running.${C_RESET}"
+if [ ${#ENABLE_SERVICES[@]} -gt 0 ]; then
+    echo "Enabling and starting: ${ENABLE_SERVICES[*]}"
+    systemctl --user enable --now "${ENABLE_SERVICES[@]}"
+    echo -e "${C_GREEN}✓ Activated: ${ENABLE_SERVICES[*]}${C_RESET}"
+else
+    echo -e "${C_YELLOW}No Pixel Desktop component was activated.${C_RESET}"
+fi
 
 # 5. Alt+Tab Keybindings (GTK/GNOME-based desktops)
 echo -e "\n${C_BOLD}${C_BLUE}[5/6] Configuring Alt+Tab shortcuts...${C_RESET}"
-if command -v gsettings >/dev/null 2>&1; then
+if [ "$ACTIVATE_DOCK" != true ]; then
+    clear_pixel_keybindings
+    echo -e "${C_YELLOW}Skipped: the Recent Apps Switcher is not activated (desktop defaults restored).${C_RESET}"
+elif command -v gsettings >/dev/null 2>&1; then
     # GNOME / GTK path (settings-daemon media-keys custom keybindings)
     MEDIA_KEYS="org.gnome.settings-daemon.plugins.media-keys"
     KB_PATH1="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/pixel-alttab/"
@@ -185,6 +265,8 @@ if command -v gsettings >/dev/null 2>&1; then
     gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH2" binding "['<Shift><Alt>Tab', '<Shift><Super>Tab']"
     gsettings set "$MEDIA_KEYS.custom-keybinding:$KB_PATH2" command "$SCRIPT_DIR/pixel_recent_apps.py prev"
     echo -e "${C_GREEN}✓ Alt+Tab and Super+Tab shortcuts wired to the Pixel Switcher (GNOME/GTK).${C_RESET}"
+else
+    echo -e "${C_YELLOW}gsettings not found, skipping Alt+Tab shortcut setup.${C_RESET}"
 fi
 
 # 6. Desktop Background

@@ -65,14 +65,18 @@
    ```bash
    ./install.sh
    ```
-   *(Use `./install.sh -y` to skip the automatic package confirmation prompt).*
+   *(Use `./install.sh -y` to skip the automatic package confirmation prompt and accept both component prompts with the default "yes").*
 
 The installer script will automatically:
 * Check and install system dependency packages (`python3-gi`, `gir1.2-wnck-3.0`, `python3-xlib`, `wmctrl`, etc.).
 * Install the official *Google Sans* fonts to `~/.local/share/fonts/`.
 * Set `assets/pixel-peach-clay-discs-1080p.jpg` as the desktop background.
-* Register and enable 4 `systemd --user` background services, pointing at the directory you cloned to.
-* Configure the desktop environment's `Alt+Tab` shortcut to the Pixel Recent Apps Switcher (GNOME/GTK-based desktops).
+* Ask which components to activate:
+  * **Dock** — if enabled, also starts the **App Drawer** and the **Recent Apps Switcher**;
+  * **Desktop** — the widget canvas.
+  Both default to "yes" (press Enter); answer `n` to skip a component. Declined components are stopped, disabled and their unit files removed; if the dock is declined, the `Alt+Tab` shortcuts are restored to the desktop defaults.
+* Register and enable only the selected `systemd --user` background services, pointing at the directory you cloned to.
+* Configure the desktop environment's `Alt+Tab` shortcut to the Pixel Recent Apps Switcher when the dock is activated (GNOME/GTK-based desktops).
 
 ---
 
@@ -148,7 +152,8 @@ Services run the scripts **directly from the cloned directory**, so edits to a s
 | `pixel_recent_apps.py` | `systemctl --user restart pixel-recent-apps.service` |
 | `pixel_common.py` | Restart **all four** services (it is imported by every component) |
 | `fetch_weather.py` | Nothing — it is executed on demand by the desktop widget |
-| `install.sh` / `systemd/*.service` | Re-run `./install.sh` (re-renders the unit files and reloads systemd) — required after environment changes such as `GDK_BACKEND` or `XAUTHORITY` |
+| `install.sh` / `systemd/*.service` | Re-run `./install.sh` (re-renders the unit files and reloads systemd) — required after environment changes such as `GDK_BACKEND` or `XAUTHORITY`, or to change which components are activated |
+| Changed which components are active | Re-run `./install.sh` and answer the two activation prompts (`-y` enables both) |
 | `~/.config/pixel-desktop/pixel-launcher-apps.json` | Nothing — the dock watches the file and reloads instantly |
 | `~/.config/pixel-desktop/quick-notes.txt` | Nothing — the notes widget watches the file live |
 | `~/.config/pixel-desktop/weather-config.json` | Nothing — the next weather fetch uses the new settings |
